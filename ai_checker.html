@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Write Aid AI Checker</title>
+    <link rel="stylesheet" href="ai_checker.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 class="title">
+                <span class="title-write-aid">Write Aid</span>
+                <span class="title-ai-checker">AI Checker</span>
+            </h1>
+            <div class="status-bar">
+                <span class="time" id="currentTime"></span>
+                <span class="status" id="statusText">Waiting for input...</span>
+                <span class="connection-status" id="connectionStatus" style="margin: 0 10px; font-size: 0.9em;">Checking connection...</span>
+                <button class="config-button" id="configButton" title="Configure Finchat">⚙️ Config</button>
+            </div>
+        </header>
+
+        <!-- Configuration Modal -->
+        <div id="configModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Finchat Configuration</h2>
+                    <button class="close-button" id="closeConfig">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="configBaseUrl">Base URL:</label>
+                        <input type="text" id="configBaseUrl" placeholder="https://your-finchat-instance.com" />
+                    </div>
+                    <div class="form-group">
+                        <label for="configApiToken">API Token:</label>
+                        <input type="password" id="configApiToken" placeholder="your_jwt_token_here" />
+                    </div>
+                    <div class="form-group">
+                        <label for="configCotSlug">CoT Slug:</label>
+                        <input type="text" id="configCotSlug" placeholder="ai-detector" />
+                    </div>
+                    <div class="form-group">
+                        <label for="configModel">Model:</label>
+                        <input type="text" id="configModel" placeholder="gemini-2.5-flash" />
+                    </div>
+                    <div class="form-actions">
+                        <button class="save-button" id="saveConfig">Save Configuration</button>
+                        <button class="cancel-button" id="cancelConfig">Cancel</button>
+                    </div>
+                    <div id="configStatus" class="config-status"></div>
+                </div>
+            </div>
+        </div>
+
+        <main class="content">
+            <div class="panel left-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Text to Evaluate</h2>
+                    <div class="header-actions">
+                        <button class="icon-button" id="pasteButton" title="Paste">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M4 2C4 1.44772 4.44772 1 5 1H7.5C8.05228 1 8.5 1.44772 8.5 2V3H11C11.5523 3 12 3.44772 12 4V13C12 13.5523 11.5523 14 11 14H5C4.44772 14 4 13.5523 4 13V4C4 3.44772 4.44772 3 5 3H7.5V2H5V3H4V2ZM5 4V13H11V4H5ZM6 5H10V6H6V5ZM6 7H10V8H6V7ZM6 9H8V10H6V9Z" fill="currentColor"/>
+                            </svg>
+                            Paste
+                        </button>
+                        <button class="go-button" id="goButton">GO</button>
+                    </div>
+                </div>
+                <div class="text-area-wrapper">
+                    <textarea 
+                        id="inputText" 
+                        class="text-input" 
+                        placeholder="Paste your text here..."
+                        rows="20"
+                    ></textarea>
+                    <div class="scroll-indicators">
+                        <button class="scroll-btn scroll-up" aria-label="Scroll up">
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 3L2 7H10L6 3Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                        <button class="scroll-btn scroll-down" aria-label="Scroll down">
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 9L2 5H10L6 9Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel right-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Evaluation</h2>
+                    <button class="icon-button" id="copyButton" title="Copy" disabled>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 4V2C4 1.44772 4.44772 1 5 1H11C11.5523 1 12 1.44772 12 2V8C12 8.55228 11.5523 9 11 9H9V11C9 11.5523 8.55228 12 8 12H2C1.44772 12 1 11.5523 1 11V5C1 4.44772 1.44772 4 2 4H4ZM5 2H11V8H9V5C9 4.44772 8.55228 4 8 4H5V2ZM2 5H8V11H2V5Z" fill="currentColor"/>
+                        </svg>
+                        Copy
+                    </button>
+                </div>
+                <div class="text-area-wrapper">
+                    <textarea 
+                        id="outputText" 
+                        class="text-output" 
+                        placeholder="Results here..."
+                        rows="20"
+                        readonly
+                    ></textarea>
+                    <div class="scroll-indicators">
+                        <button class="scroll-btn scroll-up" aria-label="Scroll up">
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 3L2 7H10L6 3Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                        <button class="scroll-btn scroll-down" aria-label="Scroll down">
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 9L2 5H10L6 9Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="ai_checker_config.js"></script>
+    <script src="ai_checker.js"></script>
+</body>
+</html>
