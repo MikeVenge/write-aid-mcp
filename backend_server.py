@@ -165,12 +165,18 @@ def mcp_analyze():
         from mcp_client_fastmcp import FinChatMCPClient
         
         data = request.json
-        sentence = data.get('sentence', '')
-        paragraph = data.get('paragraph', '')
-        purpose = data.get('purpose', 'AI detection for content analysis')
         
-        # Combine sentence and paragraph for full text analysis
-        full_text = f"{sentence}\n\n{paragraph}" if paragraph else sentence
+        # Support both formats:
+        # 1. Direct text field
+        # 2. Legacy sentence + paragraph format
+        if 'text' in data:
+            full_text = data.get('text', '')
+        else:
+            sentence = data.get('sentence', '')
+            paragraph = data.get('paragraph', '')
+            full_text = f"{sentence}\n\n{paragraph}" if paragraph else sentence
+        
+        purpose = data.get('purpose', 'AI detection for content analysis')
         
         # Create MCP client
         client = FinChatMCPClient(FINCHAT_MCP_URL)
@@ -255,13 +261,24 @@ def mcp_analyze():
                     'parse_error': str(parse_error)
                 }
         
-        # Run async function
+        # Run async function with timeout
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(analyze())
-        loop.close()
         
-        return jsonify(result)
+        try:
+            # Add 15 minute timeout (ai_detector takes ~10 minutes)
+            result = loop.run_until_complete(
+                asyncio.wait_for(analyze(), timeout=900)  # 15 minutes
+            )
+            loop.close()
+            return jsonify(result)
+        except asyncio.TimeoutError:
+            loop.close()
+            return jsonify({
+                'success': False,
+                'error': 'MCP analysis timed out after 15 minutes',
+                'analysis': 'The analysis took too long to complete. Please try again.'
+            }), 504
             
     except Exception as e:
         import traceback
