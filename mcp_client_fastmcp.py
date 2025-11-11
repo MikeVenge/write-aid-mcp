@@ -55,20 +55,7 @@ class FinChatMCPClient:
         async with self.client:
             try:
                 print("Sending request to MCP server...")
-                
-                # Access the underlying session to get raw messages
-                if hasattr(self.client, '_session'):
-                    print("Accessing internal session...")
-                    session = self.client._session
-                    
-                    # Try to call the tool using the session directly
-                    print(f"Calling tool via session: {tool_name}")
-                    result = await session.call_tool(
-                        name=tool_name,
-                        arguments=params
-                    )
-                else:
-                    result = await self.client.call_tool(tool_name, params)
+                result = await self.client.call_tool(tool_name, params)
                 
                 print(f"\n{'='*60}")
                 print("RAW RESULT RECEIVED:")
