@@ -45,9 +45,57 @@ class FinChatMCPClient:
         if params is None:
             params = {}
         
+        print(f"\n{'='*60}")
+        print(f"Calling tool: {tool_name}")
+        print(f"Parameters: {params}")
+        print(f"{'='*60}\n")
+        
         async with self.client:
-            result = await self.client.call_tool(tool_name, params)
-            return result
+            try:
+                print("Sending request to MCP server...")
+                result = await self.client.call_tool(tool_name, params)
+                
+                print(f"\n{'='*60}")
+                print("RAW RESULT RECEIVED:")
+                print(f"Type: {type(result)}")
+                print(f"Result: {result}")
+                print(f"{'='*60}\n")
+                
+                # Print all attributes if it's an object
+                if hasattr(result, '__dict__'):
+                    print("Object attributes:")
+                    for key, value in result.__dict__.items():
+                        print(f"  {key}: {value}")
+                    print()
+                
+                # Print specific attributes we're looking for
+                if hasattr(result, 'content'):
+                    print(f"Has 'content' attribute: {result.content}")
+                    print(f"Content type: {type(result.content)}")
+                    if hasattr(result.content, '__iter__'):
+                        print(f"Content items ({len(list(result.content))} items):")
+                        for i, item in enumerate(result.content):
+                            print(f"\n  Item {i}:")
+                            print(f"    Type: {type(item)}")
+                            print(f"    Value: {item}")
+                            if hasattr(item, 'type'):
+                                print(f"    item.type: {item.type}")
+                            if hasattr(item, 'text'):
+                                print(f"    item.text: {item.text}")
+                
+                print(f"\n{'='*60}\n")
+                
+                return result
+                
+            except Exception as e:
+                print(f"\n{'='*60}")
+                print(f"ERROR in call_tool:")
+                print(f"Error type: {type(e).__name__}")
+                print(f"Error message: {str(e)}")
+                print(f"{'='*60}\n")
+                import traceback
+                traceback.print_exc()
+                raise
     
     async def list_resources(self) -> list:
         """
