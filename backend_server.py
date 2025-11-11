@@ -188,77 +188,35 @@ def mcp_analyze():
                 {"text": full_text, "purpose": purpose}
             )
             
-            # Handle None result
-            if result is None:
-                return {
-                    'success': False,
-                    'error': 'MCP tool returned None',
-                    'analysis': 'The AI detector did not return a result. This may be due to an issue with the MCP server.'
-                }
+            # Handle the result object exactly like the working example
+            content_text = []
             
-            # Extract content from result - handle multiple response formats
-            try:
-                # Format 1: result has 'content' attribute (MCP standard)
-                if hasattr(result, 'content'):
-                    content_text = []
-                    for item in result.content:
-                        if hasattr(item, 'text'):
-                            content_text.append(item.text)
-                        elif hasattr(item, 'data'):
-                            content_text.append(str(item.data))
-                        else:
-                            content_text.append(str(item))
-                    
-                    return {
-                        'success': True,
-                        'analysis': '\n'.join(content_text),
-                        'raw_content': content_text
-                    }
-                
-                # Format 2: result is a dict with 'content' key
-                elif isinstance(result, dict) and 'content' in result:
-                    content = result['content']
-                    if isinstance(content, list):
-                        content_text = []
-                        for item in content:
-                            if isinstance(item, dict) and 'text' in item:
-                                content_text.append(item['text'])
-                            else:
-                                content_text.append(str(item))
-                        return {
-                            'success': True,
-                            'analysis': '\n'.join(content_text),
-                            'raw_content': content_text
-                        }
+            if hasattr(result, 'content'):
+                # It's a result object with content
+                for item in result.content:
+                    if hasattr(item, 'type') and item.type == 'text':
+                        content_text.append(item.text)
+                    elif hasattr(item, 'text'):
+                        content_text.append(item.text)
                     else:
-                        return {
-                            'success': True,
-                            'analysis': str(content),
-                            'raw': content
-                        }
+                        content_text.append(str(item))
                 
-                # Format 3: result is a dict with direct data
-                elif isinstance(result, dict):
-                    return {
-                        'success': True,
-                        'analysis': str(result.get('text', result.get('message', str(result)))),
-                        'raw': result
-                    }
-                
-                # Format 4: result is a string or other type
-                else:
-                    return {
-                        'success': True,
-                        'analysis': str(result),
-                        'raw': str(result)
-                    }
-            except Exception as parse_error:
-                # If parsing fails, return the raw result
                 return {
                     'success': True,
-                    'analysis': f"Analysis completed but response format unexpected:\n\n{str(result)}",
-                    'raw': str(result),
-                    'parse_error': str(parse_error)
+                    'analysis': '\n'.join(content_text),
+                    'raw_content': content_text
+                }
+            elif isinstance(result, dict):
+                return {
+                    'success': True,
+                    'analysis': json.dumps(result, indent=2),
+                    'raw': result
+                }
+            else:
+                return {
+                    'success': True,
+                    'analysis': str(result),
+                    'raw': str(result)
                 }
         
         # Run async function with timeout

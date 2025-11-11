@@ -46,23 +46,8 @@ class FinChatMCPClient:
             params = {}
         
         async with self.client:
-            try:
-                # Use the internal session to call the tool with better error handling
-                result = await self.client._session.call_tool(
-                    name=tool_name,
-                    arguments=params
-                )
-                return result
-            except AttributeError:
-                # Fallback to standard call_tool if _session not available
-                result = await self.client.call_tool(tool_name, params)
-                return result
-            except Exception as e:
-                # Catch all other errors and provide better debugging
-                print(f"Error calling tool '{tool_name}': {e}")
-                import traceback
-                traceback.print_exc()
-                raise
+            result = await self.client.call_tool(tool_name, params)
+            return result
     
     async def list_resources(self) -> list:
         """
