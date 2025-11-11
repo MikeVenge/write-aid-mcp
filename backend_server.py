@@ -238,6 +238,9 @@ def get_config():
     return jsonify(config)
 
 if __name__ == '__main__':
+    # Get port from environment variable (Railway/Heroku) or default to 5001
+    port = int(os.getenv('PORT', 5001))
+    
     print('=' * 60)
     print('AI Checker Backend Server')
     print('=' * 60)
@@ -268,10 +271,12 @@ if __name__ == '__main__':
         print('      export FINCHAT_API_TOKEN="your_jwt_token_here"')
     
     print('=' * 60)
-    print('Starting server on http://localhost:5001')
+    print(f'Starting server on port {port}')
     print('Press Ctrl+C to stop')
     print('=' * 60)
     
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    # Use debug=False for production
+    debug_mode = os.getenv('DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
 
 

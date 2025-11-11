@@ -2,9 +2,11 @@
 // Now uses backend proxy server for secure API calls
 
 const FINCHAT_CONFIG = {
-    // Backend proxy URL (defaults to localhost:5001)
-    // The backend server handles all finchat API calls securely
-    BACKEND_URL: 'http://localhost:5001',
+    // Backend proxy URL
+    // Auto-detect: use environment variable if set, otherwise use localhost for development
+    BACKEND_URL: typeof window !== 'undefined' && window.location.hostname !== 'localhost' 
+        ? (window.BACKEND_URL || 'https://your-railway-backend.railway.app')  // Production: Set this via environment or replace with your Railway URL
+        : 'http://localhost:5001',  // Development: localhost
     
     // MCP Mode (Model Context Protocol)
     // Set to true if using MCP-based FinChat integration
