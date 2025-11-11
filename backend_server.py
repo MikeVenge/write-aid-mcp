@@ -10,9 +10,14 @@ import os
 import requests
 import json
 from datetime import datetime
+import uuid
+import threading
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
+
+# Job storage - in production, use Redis or a database
+analysis_jobs = {}
 
 # Configuration - load from environment variables or config file
 FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', 'https://finchat-api.adgo.dev')
@@ -150,10 +155,10 @@ def get_chat_result(chat_uid):
         return jsonify({'error': f'Failed to get chat result: {str(e)}'}), 500
 
 @app.route('/api/mcp/analyze', methods=['POST'])
-def mcp_analyze():
+def mcp_analyze_start():
     """
-    Analyze text using MCP-based approach with fastmcp
-    Uses the ai_detector tool via MCP protocol
+    Start an MCP analysis job and return job ID immediately.
+    The analysis runs in the background.
     """
     if not FINCHAT_MCP_URL:
         return jsonify({
@@ -161,9 +166,6 @@ def mcp_analyze():
         }), 500
     
     try:
-        import asyncio
-        from mcp_client_fastmcp import FinChatMCPClient
-        
         data = request.json
         
         # Support both formats:
@@ -178,72 +180,125 @@ def mcp_analyze():
         
         purpose = data.get('purpose', 'AI detection for content analysis')
         
-        # Create MCP client
-        client = FinChatMCPClient(FINCHAT_MCP_URL)
+        # Generate unique job ID
+        job_id = str(uuid.uuid4())
         
-        # Call ai_detector tool asynchronously
-        async def analyze():
-            result = await client.call_tool(
-                "ai_detector",
-                {"text": full_text, "purpose": purpose}
-            )
+        # Initialize job status
+        analysis_jobs[job_id] = {
+            'status': 'processing',
+            'progress': 0,
+            'result': None,
+            'error': None,
+            'created_at': datetime.now().isoformat()
+        }
+        
+        # Start analysis in background thread
+        def run_analysis():
+            import asyncio
+            from mcp_client_fastmcp import FinChatMCPClient
             
-            # Handle the result object exactly like the working example
-            content_text = []
-            
-            if hasattr(result, 'content'):
-                # It's a result object with content
-                for item in result.content:
-                    if hasattr(item, 'type') and item.type == 'text':
-                        content_text.append(item.text)
-                    elif hasattr(item, 'text'):
-                        content_text.append(item.text)
-                    else:
-                        content_text.append(str(item))
+            try:
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
                 
-                return {
-                    'success': True,
-                    'analysis': '\n'.join(content_text),
-                    'raw_content': content_text
-                }
-            elif isinstance(result, dict):
-                return {
-                    'success': True,
-                    'analysis': json.dumps(result, indent=2),
-                    'raw': result
-                }
-            else:
-                return {
-                    'success': True,
-                    'analysis': str(result),
-                    'raw': str(result)
-                }
+                # Create MCP client
+                client = FinChatMCPClient(FINCHAT_MCP_URL)
+                
+                # Call ai_detector tool
+                async def analyze():
+                    result = await client.call_tool(
+                        "ai_detector",
+                        {"text": full_text, "purpose": purpose}
+                    )
+                    
+                    # Handle the result object
+                    content_text = []
+                    
+                    if hasattr(result, 'content'):
+                        for item in result.content:
+                            if hasattr(item, 'type') and item.type == 'text':
+                                content_text.append(item.text)
+                            elif hasattr(item, 'text'):
+                                content_text.append(item.text)
+                            else:
+                                content_text.append(str(item))
+                        
+                        return '\n'.join(content_text)
+                    elif isinstance(result, dict):
+                        return json.dumps(result, indent=2)
+                    else:
+                        return str(result)
+                
+                # Run with timeout
+                result_text = loop.run_until_complete(
+                    asyncio.wait_for(analyze(), timeout=900)
+                )
+                
+                # Update job status
+                analysis_jobs[job_id]['status'] = 'completed'
+                analysis_jobs[job_id]['progress'] = 100
+                analysis_jobs[job_id]['result'] = result_text
+                analysis_jobs[job_id]['completed_at'] = datetime.now().isoformat()
+                
+                loop.close()
+                
+            except asyncio.TimeoutError:
+                analysis_jobs[job_id]['status'] = 'failed'
+                analysis_jobs[job_id]['error'] = 'Analysis timed out after 15 minutes'
+            except Exception as e:
+                analysis_jobs[job_id]['status'] = 'failed'
+                analysis_jobs[job_id]['error'] = str(e)
+                import traceback
+                analysis_jobs[job_id]['traceback'] = traceback.format_exc()
         
-        # Run async function with timeout
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Start background thread
+        thread = threading.Thread(target=run_analysis, daemon=True)
+        thread.start()
         
-        try:
-            # Add 15 minute timeout (ai_detector takes ~10 minutes)
-            result = loop.run_until_complete(
-                asyncio.wait_for(analyze(), timeout=900)  # 15 minutes
-            )
-            loop.close()
-            return jsonify(result)
-        except asyncio.TimeoutError:
-            loop.close()
-            return jsonify({
-                'success': False,
-                'error': 'MCP analysis timed out after 15 minutes',
-                'analysis': 'The analysis took too long to complete. Please try again.'
-            }), 504
-            
+        # Return job ID immediately
+        return jsonify({
+            'job_id': job_id,
+            'status': 'processing',
+            'message': 'Analysis started. Use /api/mcp/status/<job_id> to check progress.'
+        })
+        
     except Exception as e:
         import traceback
         return jsonify({
-            'error': f'MCP analysis failed: {str(e)}',
+            'error': f'Failed to start analysis: {str(e)}',
             'traceback': traceback.format_exc()
         }), 500
+
+
+@app.route('/api/mcp/status/<job_id>', methods=['GET'])
+def mcp_analyze_status(job_id):
+    """
+    Get the status of an MCP analysis job.
+    """
+    if job_id not in analysis_jobs:
+        return jsonify({
+            'error': 'Job not found'
+        }), 404
+    
+    job = analysis_jobs[job_id]
+    
+    response = {
+        'job_id': job_id,
+        'status': job['status'],
+        'progress': job.get('progress', 0),
+        'created_at': job['created_at']
+    }
+    
+    if job['status'] == 'completed':
+        response['result'] = job['result']
+        response['completed_at'] = job.get('completed_at')
+    elif job['status'] == 'failed':
+        response['error'] = job.get('error')
+        if 'traceback' in job:
+            response['traceback'] = job['traceback']
+    
+    return jsonify(response)
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
