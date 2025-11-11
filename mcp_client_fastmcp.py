@@ -53,35 +53,60 @@ class FinChatMCPClient:
         async with self.client:
             try:
                 print("Sending request to MCP server...")
-                result = await self.client.call_tool(tool_name, params)
+                
+                # Access the underlying session to get raw messages
+                if hasattr(self.client, '_session'):
+                    print("Accessing internal session...")
+                    session = self.client._session
+                    
+                    # Try to call the tool using the session directly
+                    print(f"Calling tool via session: {tool_name}")
+                    result = await session.call_tool(
+                        name=tool_name,
+                        arguments=params
+                    )
+                else:
+                    result = await self.client.call_tool(tool_name, params)
                 
                 print(f"\n{'='*60}")
                 print("RAW RESULT RECEIVED:")
                 print(f"Type: {type(result)}")
-                print(f"Result: {result}")
+                print(f"Result repr: {repr(result)}")
+                print(f"Result str: {str(result)}")
                 print(f"{'='*60}\n")
                 
                 # Print all attributes if it's an object
                 if hasattr(result, '__dict__'):
                     print("Object attributes:")
                     for key, value in result.__dict__.items():
-                        print(f"  {key}: {value}")
+                        print(f"  {key}: {repr(value)[:200]}")
                     print()
+                
+                # Print dir() to see all available attributes/methods
+                print("Available attributes/methods:")
+                print([attr for attr in dir(result) if not attr.startswith('_')])
+                print()
                 
                 # Print specific attributes we're looking for
                 if hasattr(result, 'content'):
-                    print(f"Has 'content' attribute: {result.content}")
+                    print(f"Has 'content' attribute: YES")
                     print(f"Content type: {type(result.content)}")
-                    if hasattr(result.content, '__iter__'):
-                        print(f"Content items ({len(list(result.content))} items):")
-                        for i, item in enumerate(result.content):
-                            print(f"\n  Item {i}:")
-                            print(f"    Type: {type(item)}")
-                            print(f"    Value: {item}")
-                            if hasattr(item, 'type'):
-                                print(f"    item.type: {item.type}")
-                            if hasattr(item, 'text'):
-                                print(f"    item.text: {item.text}")
+                    print(f"Content value: {repr(result.content)[:500]}")
+                    
+                    if hasattr(result.content, '__iter__') and not isinstance(result.content, str):
+                        try:
+                            content_list = list(result.content)
+                            print(f"Content items ({len(content_list)} items):")
+                            for i, item in enumerate(content_list):
+                                print(f"\n  Item {i}:")
+                                print(f"    Type: {type(item)}")
+                                print(f"    Repr: {repr(item)[:200]}")
+                                if hasattr(item, 'type'):
+                                    print(f"    item.type: {item.type}")
+                                if hasattr(item, 'text'):
+                                    print(f"    item.text: {item.text[:200] if len(item.text) > 200 else item.text}")
+                        except Exception as iter_error:
+                            print(f"Error iterating content: {iter_error}")
                 
                 print(f"\n{'='*60}\n")
                 
@@ -92,6 +117,13 @@ class FinChatMCPClient:
                 print(f"ERROR in call_tool:")
                 print(f"Error type: {type(e).__name__}")
                 print(f"Error message: {str(e)}")
+                
+                # Try to get any partial data from the exception
+                if hasattr(e, 'args'):
+                    print(f"Error args: {e.args}")
+                if hasattr(e, '__dict__'):
+                    print(f"Error attributes: {e.__dict__}")
+                
                 print(f"{'='*60}\n")
                 import traceback
                 traceback.print_exc()
