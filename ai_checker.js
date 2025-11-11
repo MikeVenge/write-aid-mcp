@@ -986,7 +986,7 @@ function formatAggregatedResults(results, totalSentences) {
             // Check if using MCP mode
             if (finchatClient.useMcp) {
                 // MCP mode: analyze full text with ai_detector tool
-                statusText.textContent = 'Analyzing with AI Detector (MCP)... This may take ~10 minutes.';
+                statusText.textContent = 'Processing...';
                 
                 try {
                     const result = await finchatClient.analyzeMCP('', paragraph, 'AI detection analysis');
