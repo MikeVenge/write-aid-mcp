@@ -9,7 +9,7 @@ export class FinChatClient {
     this.backendUrl = process.env.REACT_APP_BACKEND_URL || 
       (window.location.hostname === 'localhost' 
         ? 'http://localhost:5001'
-        : 'https://your-railway-backend.railway.app'  // Replace with your Railway URL
+        : 'https://write-aid-mcp-production.up.railway.app'
       );
     
     this.connected = false;
