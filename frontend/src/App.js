@@ -103,7 +103,6 @@ function App() {
       const result = await client.analyzeMCP('', paragraph, 'AI detection analysis', (progress, status) => {
         // Update status during polling
         if (status === 'processing') {
-          const minutes = Math.floor(progress / 10); // Rough estimate
           setStatusText(`Analyzing... (this takes ~10 minutes, please wait)`);
         }
       });
