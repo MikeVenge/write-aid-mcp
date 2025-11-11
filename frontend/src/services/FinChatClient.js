@@ -18,10 +18,10 @@ export class FinChatClient {
 
   async initialize() {
     try {
+      console.log(`Attempting to connect to backend: ${this.backendUrl}`);
+      
       // Check backend health
-      const healthResponse = await fetch(`${this.backendUrl}/health`, {
-        timeout: 5000
-      });
+      const healthResponse = await fetch(`${this.backendUrl}/health`);
       
       if (healthResponse.ok) {
         // Check configuration
@@ -37,7 +37,11 @@ export class FinChatClient {
           console.log(`  MCP Enabled: ${this.mcpEnabled}`);
           
           return true;
+        } else {
+          console.warn(`⚠ Config endpoint returned status: ${configResponse.status}`);
         }
+      } else {
+        console.warn(`⚠ Health endpoint returned status: ${healthResponse.status}`);
       }
       
       console.warn('⚠ Backend is running but not properly configured');
@@ -45,6 +49,11 @@ export class FinChatClient {
       return false;
     } catch (error) {
       console.error('✗ Failed to connect to backend:', error.message);
+      console.error(`  Attempted URL: ${this.backendUrl}`);
+      console.error(`  Error type: ${error.name}`);
+      if (error.cause) {
+        console.error(`  Error cause:`, error.cause);
+      }
       this.connected = false;
       return false;
     }
