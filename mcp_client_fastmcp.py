@@ -21,9 +21,7 @@ class FinChatMCPClient:
         self.url = url
         # Create client with extended timeout for long-running tools
         # ai_detector takes ~10 minutes, so set timeout to 15 minutes (900 seconds)
-        import httpx
-        timeout_config = httpx.Timeout(900.0, connect=10.0)
-        self.client = Client(url, timeout=timeout_config)
+        self.client = Client(url, timeout=900.0)
     
     async def list_tools(self) -> list:
         """
