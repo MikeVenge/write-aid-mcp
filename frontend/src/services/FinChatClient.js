@@ -54,20 +54,20 @@ export class FinChatClient {
     return this.connected;
   }
 
-  async analyzeMCP(sentence, paragraph, purpose = 'AI detection for content analysis') {
+  async analyzeMCP(sentence, paragraph, purpose = 'AI detection for content analysis', onProgress = null) {
     if (!this.connected) {
       throw new Error('Backend not connected. Please check your connection.');
     }
 
     try {
+      // Step 1: Start the analysis job
       const response = await fetch(`${this.backendUrl}/api/mcp/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          sentence: sentence,
-          paragraph: paragraph,
+          text: paragraph || sentence,  // Use text field
           purpose: purpose
         })
       });
@@ -76,21 +76,69 @@ export class FinChatClient {
         const errorData = await response.json().catch(() => ({ 
           error: response.statusText 
         }));
-        throw new Error(`MCP analysis failed: ${errorData.error || response.statusText}`);
+        throw new Error(`Failed to start analysis: ${errorData.error || response.statusText}`);
       }
 
-      const data = await response.json();
-
-      if (data.success) {
-        return data.analysis || data.raw_content?.join('\n') || 'Analysis completed';
-      } else if (data.error) {
-        throw new Error(data.error);
-      } else {
-        return JSON.stringify(data);
+      const startData = await response.json();
+      
+      if (startData.error) {
+        throw new Error(startData.error);
       }
+
+      const jobId = startData.job_id;
+      
+      if (!jobId) {
+        throw new Error('No job ID received from server');
+      }
+
+      // Step 2: Poll for results
+      return await this.pollForResult(jobId, onProgress);
+      
     } catch (error) {
       throw new Error(`Failed to analyze with MCP: ${error.message}`);
     }
+  }
+
+  async pollForResult(jobId, onProgress = null) {
+    const pollInterval = 5000; // Poll every 5 seconds
+    const maxAttempts = 200; // 200 * 5s = 1000s = ~16 minutes
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      attempts++;
+
+      try {
+        const response = await fetch(`${this.backendUrl}/api/mcp/status/${jobId}`);
+        
+        if (!response.ok) {
+          throw new Error(`Status check failed: ${response.statusText}`);
+        }
+
+        const status = await response.json();
+
+        // Call progress callback if provided
+        if (onProgress) {
+          onProgress(status.progress || 0, status.status);
+        }
+
+        if (status.status === 'completed') {
+          return status.result || 'Analysis completed';
+        }
+
+        if (status.status === 'failed') {
+          throw new Error(status.error || 'Analysis failed');
+        }
+
+        // Status is 'processing', continue polling
+        
+      } catch (error) {
+        console.warn(`Poll attempt ${attempts} failed:`, error);
+        // Continue polling even on error
+      }
+    }
+
+    throw new Error('Analysis timed out - exceeded maximum polling attempts');
   }
 
   async createSession() {

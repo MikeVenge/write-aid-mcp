@@ -97,10 +97,16 @@ function App() {
         return;
       }
       
-      // Use MCP mode
-      setStatusText('Analyzing with AI Detector (MCP)... This may take ~10 minutes.');
+      // Use MCP mode with polling
+      setStatusText('Starting AI Detector analysis...');
       
-      const result = await client.analyzeMCP('', paragraph, 'AI detection analysis');
+      const result = await client.analyzeMCP('', paragraph, 'AI detection analysis', (progress, status) => {
+        // Update status during polling
+        if (status === 'processing') {
+          const minutes = Math.floor(progress / 10); // Rough estimate
+          setStatusText(`Analyzing... (this takes ~10 minutes, please wait)`);
+        }
+      });
       
       setOutputText(formatResult(result));
       setStatusText('Analysis complete (via MCP).');
