@@ -2,6 +2,8 @@
 
 This is the React frontend for the Write Aid AI Checker application.
 
+Deployed on Vercel.
+
 ## Development
 
 ### Prerequisites
