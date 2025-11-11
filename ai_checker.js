@@ -1,7 +1,14 @@
 // DOM Elements - will be initialized when DOM is ready
-let inputText, outputText, pasteButton, copyButton, goButton, statusText, currentTime;
-let configButton, configModal, closeConfig, saveConfig, cancelConfig;
-let configBaseUrl, configApiToken, configCotSlug, configModel, configStatus;
+let inputText, outputText, pasteButton, copyButton, goButton, statusText, timer;
+
+// Timer variables
+let timerInterval = null;
+let startTime = null;
+let isRunning = false;
+
+// Alarm sound using Web Audio API
+let audioContext = null;
+let alarmSound = null;
 
 // Sentence Splitter - Split paragraph into sentences
 class SentenceSplitter {
@@ -508,35 +515,113 @@ document.addEventListener('DOMContentLoaded', () => {
     copyButton = document.getElementById('copyButton');
     goButton = document.getElementById('goButton');
     statusText = document.getElementById('statusText');
-    currentTime = document.getElementById('currentTime');
+    timer = document.getElementById('timer');
     
-    // Configuration modal elements
-    configButton = document.getElementById('configButton');
-    configModal = document.getElementById('configModal');
-    closeConfig = document.getElementById('closeConfig');
-    saveConfig = document.getElementById('saveConfig');
-    cancelConfig = document.getElementById('cancelConfig');
-    configBaseUrl = document.getElementById('configBaseUrl');
-    configApiToken = document.getElementById('configApiToken');
-    configCotSlug = document.getElementById('configCotSlug');
-    configModel = document.getElementById('configModel');
-    configStatus = document.getElementById('configStatus');
+    // Initialize audio context for alarm
+    initializeAlarm();
     
     // Initialize event listeners
     initializeEventListeners();
-    
-    // Update time display
-    updateTime();
-    setInterval(updateTime, 60000); // Update every minute
 });
 
-// Update time display
-function updateTime() {
-    if (currentTime) {
-        const now = new Date();
-        const hours = now.getHours().toString().padStart(2, '0');
-        const minutes = now.getMinutes().toString().padStart(2, '0');
-        currentTime.textContent = `${hours}:${minutes}`;
+// Timer functions
+function startTimer() {
+    if (isRunning) return;
+    
+    isRunning = true;
+    startTime = Date.now();
+    
+    timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+        const seconds = (elapsed % 60).toString().padStart(2, '0');
+        
+        if (timer) {
+            timer.textContent = `${minutes}:${seconds}`;
+        }
+    }, 100); // Update every 100ms for smooth display
+}
+
+function stopTimer() {
+    isRunning = false;
+    
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+}
+
+function resetTimer() {
+    stopTimer();
+    startTime = null;
+    
+    if (timer) {
+        timer.textContent = '00:00';
+    }
+}
+
+// Initialize alarm sound
+function initializeAlarm() {
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+        console.warn('Web Audio API not supported', e);
+    }
+}
+
+// Play alarm sound
+function playAlarm() {
+    if (!audioContext) return;
+    
+    try {
+        // Create oscillator for beep sound
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Set frequency (800 Hz for pleasant beep)
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        
+        // Set volume
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        // Play for 0.5 seconds
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+        
+        // Play 3 beeps
+        setTimeout(() => {
+            const osc2 = audioContext.createOscillator();
+            const gain2 = audioContext.createGain();
+            osc2.connect(gain2);
+            gain2.connect(audioContext.destination);
+            osc2.frequency.value = 800;
+            osc2.type = 'sine';
+            gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            osc2.start(audioContext.currentTime);
+            osc2.stop(audioContext.currentTime + 0.5);
+        }, 600);
+        
+        setTimeout(() => {
+            const osc3 = audioContext.createOscillator();
+            const gain3 = audioContext.createGain();
+            osc3.connect(gain3);
+            gain3.connect(audioContext.destination);
+            osc3.frequency.value = 800;
+            osc3.type = 'sine';
+            gain3.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gain3.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            osc3.start(audioContext.currentTime);
+            osc3.stop(audioContext.currentTime + 0.5);
+        }, 1200);
+        
+    } catch (e) {
+        console.error('Failed to play alarm:', e);
     }
 }
 
@@ -846,6 +931,10 @@ function formatAggregatedResults(results, totalSentences) {
             return;
         }
         
+        // Start timer
+        resetTimer();
+        startTimer();
+        
         statusText.textContent = 'Processing...';
         copyButton.disabled = true;
         goButton.disabled = true;
@@ -881,10 +970,14 @@ function formatAggregatedResults(results, totalSentences) {
                     copyButton.disabled = false;
                     goButton.disabled = false;
                     
+                    // Stop timer and play alarm
+                    stopTimer();
+                    playAlarm();
+                    
                     if (result.error) {
                         statusText.textContent = result.error;
                     } else {
-                        statusText.textContent = 'Evaluation complete (local analysis).';
+                        statusText.textContent = 'Complete';
                     }
                 }, 500);
                 return;
@@ -901,7 +994,12 @@ function formatAggregatedResults(results, totalSentences) {
                     outputText.value = formatFinchatResults(result);
                     copyButton.disabled = false;
                     goButton.disabled = false;
-                    statusText.textContent = 'Analysis complete (via MCP).';
+                    
+                    // Stop timer and play alarm
+                    stopTimer();
+                    playAlarm();
+                    
+                    statusText.textContent = 'Complete';
                 } catch (error) {
                     console.error('MCP analysis error:', error);
                     // Fall back to local analysis
@@ -910,7 +1008,12 @@ function formatAggregatedResults(results, totalSentences) {
                     outputText.value = `⚠️ MCP analysis failed: ${error.message}\n\nUsing local fallback:\n\n${formatted}`;
                     copyButton.disabled = false;
                     goButton.disabled = false;
-                    statusText.textContent = 'Analysis complete (local fallback).';
+                    
+                    // Stop timer and play alarm
+                    stopTimer();
+                    playAlarm();
+                    
+                    statusText.textContent = 'Complete';
                 }
                 return;
             }
@@ -976,25 +1079,40 @@ function formatAggregatedResults(results, totalSentences) {
             outputText.value = formatAggregatedResults(results, sentences.length);
             copyButton.disabled = false;
             goButton.disabled = false;
-            statusText.textContent = `Analysis complete. Processed ${sentences.length} sentence(s).`;
+            
+            // Stop timer and play alarm
+            stopTimer();
+            playAlarm();
+            
+            statusText.textContent = 'Complete';
             
         } catch (error) {
             console.error('Evaluation error:', error);
             
             // Fallback to local analysis on error
-            statusText.textContent = 'Finchat error. Using local analysis...';
+            statusText.textContent = 'Error. Using local analysis...';
             try {
                 const result = evaluateText(paragraph);
                 const formatted = formatResults(result);
-                outputText.value = `⚠️ Note: Finchat API unavailable. Using local analysis.\n\n${formatted}\n\nError: ${error.message}`;
+                outputText.value = `⚠️ Note: Analysis failed. Using local analysis.\n\n${formatted}\n\nError: ${error.message}`;
                 copyButton.disabled = false;
                 goButton.disabled = false;
-                statusText.textContent = 'Evaluation complete (local fallback).';
+                
+                // Stop timer and play alarm
+                stopTimer();
+                playAlarm();
+                
+                statusText.textContent = 'Complete';
             } catch (fallbackError) {
                 outputText.value = `Error: ${error.message}\n\nFallback analysis also failed: ${fallbackError.message}`;
                 copyButton.disabled = false;
                 goButton.disabled = false;
-                statusText.textContent = 'Evaluation failed.';
+                
+                // Stop timer and play alarm
+                stopTimer();
+                playAlarm();
+                
+                statusText.textContent = 'Failed';
             }
         }
     });
@@ -1012,90 +1130,6 @@ function formatAggregatedResults(results, totalSentences) {
         copyButton.disabled = !outputText.value.trim();
     });
     
-    // Configuration modal handlers
-    if (configButton) {
-        configButton.addEventListener('click', () => {
-            // Populate form with current config (from file or localStorage)
-            if (typeof FINCHAT_CONFIG !== 'undefined') {
-                configBaseUrl.value = FINCHAT_CONFIG.BASE_URL || '';
-                configApiToken.value = FINCHAT_CONFIG.API_TOKEN || '';
-                configCotSlug.value = FINCHAT_CONFIG.COT_SLUG || 'ai-detector';
-                configModel.value = FINCHAT_CONFIG.ANALYSIS_MODEL || 'gemini-2.5-flash';
-            }
-            
-            // Try to load from localStorage
-            const saved = getSavedConfig();
-            if (saved) {
-                configBaseUrl.value = saved.BASE_URL || configBaseUrl.value;
-                configApiToken.value = saved.API_TOKEN || configApiToken.value;
-                configCotSlug.value = saved.COT_SLUG || configCotSlug.value;
-                configModel.value = saved.ANALYSIS_MODEL || configModel.value;
-            }
-            
-            configModal.style.display = 'block';
-            configStatus.textContent = '';
-            configStatus.className = 'config-status';
-        });
-    }
-    
-    if (closeConfig) {
-        closeConfig.addEventListener('click', () => {
-            configModal.style.display = 'none';
-        });
-    }
-    
-    if (cancelConfig) {
-        cancelConfig.addEventListener('click', () => {
-            configModal.style.display = 'none';
-        });
-    }
-    
-    if (saveConfig) {
-        saveConfig.addEventListener('click', () => {
-            const baseUrl = configBaseUrl.value.trim();
-            const apiToken = configApiToken.value.trim();
-            const cotSlug = configCotSlug.value.trim() || 'ai-detector';
-            const model = configModel.value.trim() || 'gemini-2.5-flash';
-            
-            if (!baseUrl || !apiToken) {
-                configStatus.textContent = 'Please fill in Base URL and API Token';
-                configStatus.className = 'config-status error';
-                return;
-            }
-            
-            // Save to localStorage
-            const config = {
-                BASE_URL: baseUrl,
-                API_TOKEN: apiToken,
-                COT_SLUG: cotSlug,
-                ANALYSIS_MODEL: model,
-                USE_WEB_SEARCH: true,
-                POLL_INTERVAL: 5000,
-                MAX_POLL_ATTEMPTS: 60,
-                USE_L2M2: false,
-                L2M2_API_URL: 'http://l2m2-production'
-            };
-            
-            localStorage.setItem('finchat_config', JSON.stringify(config));
-            
-            configStatus.textContent = 'Configuration saved! Refreshing page...';
-            configStatus.className = 'config-status success';
-            
-            // Reload page to apply new config
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
-        });
-    }
-    
-    // Close modal when clicking outside
-    if (configModal) {
-        window.addEventListener('click', (event) => {
-            if (event.target === configModal) {
-                configModal.style.display = 'none';
-            }
-        });
-    }
 }
 
 // Load saved config from localStorage

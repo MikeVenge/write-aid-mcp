@@ -14,45 +14,11 @@
                 <span class="title-ai-checker">AI Checker</span>
             </h1>
             <div class="status-bar">
-                <span class="time" id="currentTime"></span>
-                <span class="status" id="statusText">Waiting for input...</span>
-                <span class="connection-status" id="connectionStatus" style="margin: 0 10px; font-size: 0.9em;">Checking connection...</span>
-                <button class="config-button" id="configButton" title="Configure Finchat">⚙️ Config</button>
+                <span class="timer" id="timer">00:00</span>
+                <span class="status" id="statusText">Ready</span>
             </div>
         </header>
 
-        <!-- Configuration Modal -->
-        <div id="configModal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>Finchat Configuration</h2>
-                    <button class="close-button" id="closeConfig">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="configBaseUrl">Base URL:</label>
-                        <input type="text" id="configBaseUrl" placeholder="https://your-finchat-instance.com" />
-                    </div>
-                    <div class="form-group">
-                        <label for="configApiToken">API Token:</label>
-                        <input type="password" id="configApiToken" placeholder="your_jwt_token_here" />
-                    </div>
-                    <div class="form-group">
-                        <label for="configCotSlug">CoT Slug:</label>
-                        <input type="text" id="configCotSlug" placeholder="ai-detector" />
-                    </div>
-                    <div class="form-group">
-                        <label for="configModel">Model:</label>
-                        <input type="text" id="configModel" placeholder="gemini-2.5-flash" />
-                    </div>
-                    <div class="form-actions">
-                        <button class="save-button" id="saveConfig">Save Configuration</button>
-                        <button class="cancel-button" id="cancelConfig">Cancel</button>
-                    </div>
-                    <div id="configStatus" class="config-status"></div>
-                </div>
-            </div>
-        </div>
 
         <main class="content">
             <div class="panel left-panel">
