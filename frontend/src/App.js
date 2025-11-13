@@ -7,6 +7,7 @@ function App() {
   const [outputText, setOutputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [isMCPConnected, setIsMCPConnected] = useState(false);
   const [client, setClient] = useState(null);
   const timerIntervalRef = useRef(null);
 
@@ -17,8 +18,10 @@ function App() {
         const finchatClient = new FinChatClient();
         await finchatClient.initialize();
         setClient(finchatClient);
+        setIsMCPConnected(finchatClient.isConnected());
       } catch (error) {
         console.error('Failed to initialize client:', error);
+        setIsMCPConnected(false);
       }
     };
 
@@ -129,6 +132,7 @@ function App() {
     <div className="container">
       <header>
         <h1 className="title">
+          <span className={`status-light ${isMCPConnected ? 'status-connected' : 'status-disconnected'}`}></span>
           <span className="title-write-aid">Write Aid</span>{' '}
           <span className="title-ai-checker">AI Checker</span>
         </h1>

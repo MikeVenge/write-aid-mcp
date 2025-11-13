@@ -89,6 +89,7 @@ export class FinChatClient {
       }
 
       const startData = await response.json();
+      console.log('Analysis job started, response:', JSON.stringify(startData, null, 2));
       
       if (startData.error) {
         throw new Error(startData.error);
@@ -97,9 +98,11 @@ export class FinChatClient {
       const jobId = startData.job_id;
       
       if (!jobId) {
+        console.error('No job_id in start response:', startData);
         throw new Error('No job ID received from server');
       }
 
+      console.log(`Starting to poll for job ID: ${jobId}`);
       // Step 2: Poll for results
       return await this.pollForResult(jobId, onProgress);
       
@@ -113,18 +116,28 @@ export class FinChatClient {
     const maxAttempts = 200; // 200 * 5s = 1000s = ~16 minutes
     let attempts = 0;
 
+    console.log(`Starting to poll for job ${jobId}`);
+
     while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      // Wait before polling (except for first attempt)
+      if (attempts > 0) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
       attempts++;
 
       try {
+        console.log(`Poll attempt ${attempts}/${maxAttempts} for job ${jobId}`);
         const response = await fetch(`${this.backendUrl}/api/mcp/status/${jobId}`);
         
         if (!response.ok) {
+          const errorText = await response.text().catch(() => response.statusText);
+          console.error(`Status check failed (HTTP ${response.status}):`, errorText);
           throw new Error(`Status check failed: ${response.statusText}`);
         }
 
         const status = await response.json();
+        console.log(`Job ${jobId} status response:`, JSON.stringify(status, null, 2));
+        console.log(`Job ${jobId} status:`, status.status, status.progress !== undefined ? `(${status.progress}%)` : '');
 
         // Call progress callback if provided
         if (onProgress) {
@@ -132,21 +145,32 @@ export class FinChatClient {
         }
 
         if (status.status === 'completed') {
+          console.log(`Job ${jobId} completed! Result length:`, status.result ? status.result.length : 0);
           return status.result || 'Analysis completed';
         }
 
         if (status.status === 'failed') {
+          console.error(`Job ${jobId} failed:`, status.error);
           throw new Error(status.error || 'Analysis failed');
         }
 
         // Status is 'processing', continue polling
+        console.log(`Job ${jobId} still processing, will check again in ${pollInterval/1000}s...`);
         
       } catch (error) {
-        console.warn(`Poll attempt ${attempts} failed:`, error);
-        // Continue polling even on error
+        // Only log non-critical errors (network issues, etc.)
+        // Don't log if it's a failed status (that's handled above)
+        if (!error.message.includes('Analysis failed')) {
+          console.warn(`Poll attempt ${attempts} failed:`, error.message);
+        } else {
+          // Re-throw failed status errors
+          throw error;
+        }
+        // Continue polling for network/parsing errors
       }
     }
 
+    console.error(`Polling timed out after ${attempts} attempts for job ${jobId}`);
     throw new Error('Analysis timed out - exceeded maximum polling attempts');
   }
 
