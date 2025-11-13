@@ -54,3 +54,9 @@ coverage.xml
 temp/
 tmp/
 
+# Backend files (belong on 'backend' branch, not main)
+backend_server.py
+
+# Experimental/test MCP clients
+mcp_client_sse.py
+

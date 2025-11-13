@@ -1,29 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import { FinChatClient } from './services/FinChatClient';
 
 function App() {
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
-  const [statusText, setStatusText] = useState('Waiting for input...');
-  const [currentTime, setCurrentTime] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState('Checking connection...');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
   const [client, setClient] = useState(null);
-
-  // Initialize time display
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      const hours = now.getHours().toString().padStart(2, '0');
-      const minutes = now.getMinutes().toString().padStart(2, '0');
-      setCurrentTime(`${hours}:${minutes}`);
-    };
-    
-    updateTime();
-    const interval = setInterval(updateTime, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  const timerIntervalRef = useRef(null);
 
   // Initialize FinChat client
   useEffect(() => {
@@ -32,28 +17,51 @@ function App() {
         const finchatClient = new FinChatClient();
         await finchatClient.initialize();
         setClient(finchatClient);
-        
-        if (finchatClient.isConnected()) {
-          setConnectionStatus('✅ MCP Connected');
-        } else {
-          setConnectionStatus('⚠️ Backend Offline');
-        }
       } catch (error) {
         console.error('Failed to initialize client:', error);
-        setConnectionStatus('❌ Error');
       }
     };
 
     initializeClient();
   }, []);
 
+  // Timer effect - updates elapsed time when processing
+  useEffect(() => {
+    if (isProcessing) {
+      // Start timer
+      setElapsedTime(0);
+      timerIntervalRef.current = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      // Stop timer
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, [isProcessing]);
+
+  // Format elapsed time as MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
       setInputText(text);
-      setStatusText('Text pasted. Click GO to evaluate.');
     } catch (err) {
-      setStatusText('Please paste your text manually (Cmd+V / Ctrl+V)');
+      // Failed to paste
     }
   };
 
@@ -62,12 +70,8 @@ function App() {
     
     try {
       await navigator.clipboard.writeText(outputText);
-      setStatusText('Results copied to clipboard!');
-      setTimeout(() => {
-        setStatusText(outputText ? 'Evaluation complete.' : 'Waiting for input...');
-      }, 2000);
     } catch (err) {
-      setStatusText('Failed to copy to clipboard');
+      // Failed to copy
     }
   };
 
@@ -75,43 +79,32 @@ function App() {
     const paragraph = inputText.trim();
     
     if (!paragraph) {
-      setStatusText('Please enter some text first.');
       setOutputText('');
       return;
     }
     
     if (paragraph.length < 10) {
-      setStatusText('Text is too short. Please provide at least 10 characters.');
       setOutputText('Text must be at least 10 characters long for accurate evaluation.');
       return;
     }
     
-    setStatusText('Processing...');
     setIsProcessing(true);
     
     try {
       if (!client || !client.isConnected()) {
-        setStatusText('Backend not available. Using local analysis...');
         setOutputText('⚠️ Backend not configured. Please check your connection.');
         setIsProcessing(false);
         return;
       }
       
       // Use MCP mode with polling
-      setStatusText('Starting AI Detector analysis...');
-      
       const result = await client.analyzeMCP('', paragraph, 'AI detection analysis', (progress, status) => {
-        // Update status during polling
-        if (status === 'processing') {
-          setStatusText(`Analyzing... (this takes ~10 minutes, please wait)`);
-        }
+        // Progress callback for polling updates
       });
       
       setOutputText(formatResult(result));
-      setStatusText('Analysis complete (via MCP).');
     } catch (error) {
       console.error('Analysis error:', error);
-      setStatusText('Analysis failed. Please try again.');
       setOutputText(`⚠️ Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
@@ -139,19 +132,12 @@ function App() {
           <span className="title-write-aid">Write Aid</span>{' '}
           <span className="title-ai-checker">AI Checker</span>
         </h1>
-        <div className="status-bar">
-          <span className="time">{currentTime}</span>
-          <span className="status">{statusText}</span>
-          <span 
-            className="connection-status" 
-            style={{ 
-              color: connectionStatus.includes('✅') ? '#4CAF50' : 
-                     connectionStatus.includes('⚠️') ? '#ff9800' : '#f44336' 
-            }}
-          >
-            {connectionStatus}
-          </span>
-        </div>
+        {isProcessing && (
+          <div className="timer-display">
+            <span className="timer-label">Analysis Time:</span>
+            <span className="timer-value">{formatTime(elapsedTime)}</span>
+          </div>
+        )}
       </header>
 
       <main className="content">
