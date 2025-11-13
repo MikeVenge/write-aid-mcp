@@ -7,6 +7,13 @@ import asyncio
 from typing import Any, Dict, Optional
 from fastmcp import Client
 
+# Import FastMCP exceptions for better error handling
+try:
+    from fastmcp.exceptions import ToolError
+except ImportError:
+    # Fallback if ToolError is not available
+    ToolError = Exception
+
 
 class FinChatMCPClient:
     """Client for connecting to the FinChat MCP server."""
@@ -57,6 +64,14 @@ class FinChatMCPClient:
                 print("Sending request to MCP server...")
                 result = await self.client.call_tool(tool_name, params)
                 
+                # Check if result is None (this can happen if MCP server returns null)
+                if result is None:
+                    error_msg = f"MCP server returned None for tool '{tool_name}'. This may indicate the tool execution failed or timed out."
+                    print(f"\n{'='*60}")
+                    print(f"ERROR: {error_msg}")
+                    print(f"{'='*60}\n")
+                    raise ValueError(error_msg)
+                
                 print(f"\n{'='*60}")
                 print("RAW RESULT RECEIVED:")
                 print(f"Type: {type(result)}")
@@ -101,11 +116,39 @@ class FinChatMCPClient:
                 
                 return result
                 
+            except ValueError as ve:
+                # Re-raise ValueError (None result)
+                raise
+            except ToolError as te:
+                # Handle FastMCP ToolError specifically
+                error_msg = str(te)
+                print(f"\n{'='*60}")
+                print(f"FastMCP ToolError:")
+                print(f"Error message: {error_msg}")
+                
+                # Check if this is the None result error
+                if "'NoneType' object has no attribute 'to_mcp_result'" in error_msg:
+                    better_msg = f"MCP server returned None/null response for tool '{tool_name}'. This typically means the tool execution failed, timed out, or returned an invalid response."
+                    print(f"Detected None result error - {better_msg}")
+                    print(f"{'='*60}\n")
+                    raise ValueError(better_msg) from te
+                
+                print(f"{'='*60}\n")
+                import traceback
+                traceback.print_exc()
+                raise ValueError(f"Tool execution failed: {error_msg}") from te
             except Exception as e:
                 print(f"\n{'='*60}")
                 print(f"ERROR in call_tool:")
                 print(f"Error type: {type(e).__name__}")
                 print(f"Error message: {str(e)}")
+                
+                # Check if this is the specific FastMCP None error
+                if "'NoneType' object has no attribute 'to_mcp_result'" in str(e):
+                    error_msg = f"MCP server returned None/null response for tool '{tool_name}'. The tool may have failed or the response was malformed."
+                    print(f"Detected FastMCP None result error - {error_msg}")
+                    print(f"{'='*60}\n")
+                    raise ValueError(error_msg) from e
                 
                 # Try to get any partial data from the exception
                 if hasattr(e, 'args'):
