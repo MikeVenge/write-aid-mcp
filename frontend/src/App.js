@@ -134,9 +134,9 @@ function App() {
       return;
     }
     
-    // Check for minimum 5 words
+    // Check for minimum 100 words
     const wordCount = countWords(paragraph);
-    if (wordCount < 5) {
+    if (wordCount < 100) {
       setShowWarning(true);
       return;
     }
@@ -198,7 +198,7 @@ function App() {
               </button>
             </div>
             <div className="modal-body">
-              <p>Please provide at least <strong>5 words</strong> for accurate AI detection analysis.</p>
+              <p>Please provide at least <strong>100 words</strong> for accurate AI detection analysis.</p>
               <p className="modal-explanation">
                 The AI detection tool requires a minimum amount of text to properly analyze writing patterns and detect AI-generated content. Short phrases or single sentences may not provide enough context for reliable results.
               </p>
