@@ -8,6 +8,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isMCPConnected, setIsMCPConnected] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
   const [client, setClient] = useState(null);
   const timerIntervalRef = useRef(null);
 
@@ -59,6 +60,11 @@ function App() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Count words in text
+  const countWords = (text) => {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  };
+
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -86,8 +92,10 @@ function App() {
       return;
     }
     
-    if (paragraph.length < 10) {
-      setOutputText('Text must be at least 10 characters long for accurate evaluation.');
+    // Check for minimum 5 words
+    const wordCount = countWords(paragraph);
+    if (wordCount < 5) {
+      setShowWarning(true);
       return;
     }
     
@@ -130,6 +138,41 @@ function App() {
 
   return (
     <div className="container">
+      {/* Warning Modal */}
+      {showWarning && (
+        <div className="modal-overlay" onClick={() => setShowWarning(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">⚠️ Insufficient Text</h3>
+              <button 
+                className="modal-close" 
+                onClick={() => setShowWarning(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Please provide at least <strong>5 words</strong> for accurate AI detection analysis.</p>
+              <p className="modal-explanation">
+                The AI detection tool requires a minimum amount of text to properly analyze writing patterns and detect AI-generated content. Short phrases or single sentences may not provide enough context for reliable results.
+              </p>
+              <p className="modal-word-count">
+                Current word count: <strong>{countWords(inputText.trim())}</strong> word{countWords(inputText.trim()) !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="modal-button" 
+                onClick={() => setShowWarning(false)}
+              >
+                OK, I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header>
         <h1 className="title">
           <span className={`status-light ${isMCPConnected ? 'status-connected' : 'status-disconnected'}`}></span>
