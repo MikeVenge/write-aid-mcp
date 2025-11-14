@@ -65,6 +65,48 @@ function App() {
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
 
+  // Play bell sound 3 times
+  const playBellSound = async () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Resume audio context if suspended (required by some browsers)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
+      // Create a bell-like sound using oscillators
+      const playBell = (delay) => {
+        setTimeout(() => {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          // Bell-like frequency (starts high, decays to lower)
+          oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.3);
+          
+          // Envelope for bell-like decay
+          gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+          
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.5);
+        }, delay);
+      };
+      
+      // Play bell 3 times with delays
+      playBell(0);      // First bell immediately
+      playBell(300);    // Second bell after 300ms
+      playBell(600);    // Third bell after 600ms
+    } catch (error) {
+      console.warn('Could not play bell sound:', error);
+    }
+  };
+
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -114,6 +156,9 @@ function App() {
       });
       
       setOutputText(formatResult(result));
+      
+      // Play bell sound 3 times when analysis completes
+      playBellSound();
     } catch (error) {
       console.error('Analysis error:', error);
       setOutputText(`⚠️ Error: ${error.message}`);
