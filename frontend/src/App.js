@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import './App.css';
 import { FinChatClient } from './services/FinChatClient';
 
@@ -126,6 +127,12 @@ function App() {
     }
   };
 
+  const handleReset = () => {
+    setInputText('');
+    setOutputText('');
+    setShowWarning(false);
+  };
+
   const handleAnalyze = useCallback(async () => {
     const paragraph = inputText.trim();
     
@@ -172,10 +179,10 @@ function App() {
       return 'No analysis result received.';
     }
     
-    let output = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    output += 'AI DETECTION ANALYSIS\n';
-    output += '(Powered by FinChat MCP)\n\n';
-    output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+    let output = '---\n\n';
+    output += '# AI DETECTION ANALYSIS\n';
+    output += '*(Powered by FinChat MCP)*\n\n';
+    output += '---\n\n';
     output += result;
     
     return output;
@@ -245,10 +252,19 @@ function App() {
               </button>
               <button 
                 className="go-button" 
-                onClick={handleAnalyze}
+                onClick={handleReset}
                 disabled={isProcessing}
+                title="Reset input and output to start a new analysis"
               >
-                GO
+                Reset
+              </button>
+              <button 
+                className="go-button" 
+                onClick={handleAnalyze}
+                disabled={isProcessing || !inputText.trim()}
+                title="Start AI detection analysis"
+              >
+                Analyze
               </button>
             </div>
           </div>
@@ -279,13 +295,13 @@ function App() {
             </button>
           </div>
           <div className="text-area-wrapper">
-            <textarea
-              className="text-output"
-              placeholder="Results here..."
-              rows="20"
-              value={outputText}
-              readOnly
-            />
+            {outputText ? (
+              <div className="text-output-markdown">
+                <ReactMarkdown>{outputText}</ReactMarkdown>
+              </div>
+            ) : (
+              <div className="text-output-placeholder">Results here...</div>
+            )}
           </div>
         </div>
       </main>
