@@ -185,14 +185,16 @@ function App() {
       return;
     }
     
-    // Check if text hasn't changed from last analysis
-    if (isProcessing && paragraph === lastAnalyzedTextRef.current) {
+    // Store whether we were already processing (before state changes)
+    const wasProcessing = isProcessing;
+    
+    // Check if text hasn't changed from last analysis (only if analysis is running)
+    // If text has changed, proceed with new analysis regardless
+    // Only check if we have a previous analysis to compare against
+    if (wasProcessing && lastAnalyzedTextRef.current && paragraph === lastAnalyzedTextRef.current) {
       setShowSameTextWarning(true);
       return;
     }
-    
-    // Store whether we were already processing (before state changes)
-    const wasProcessing = isProcessing;
     
     // If analysis is already running, abort it immediately
     if (wasProcessing) {
