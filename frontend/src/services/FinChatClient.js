@@ -104,14 +104,23 @@ export class FinChatClient {
 
       console.log(`Starting to poll for job ID: ${jobId}`);
       // Step 2: Poll for results
-      return await this.pollForResult(jobId, onProgress);
+      // Extract shouldAbort from onProgress if it's an object, otherwise use null
+      const abortCheck = onProgress && typeof onProgress === 'object' && onProgress.shouldAbort 
+        ? onProgress.shouldAbort 
+        : null;
+      const progressCallback = onProgress && typeof onProgress === 'function' 
+        ? onProgress 
+        : (onProgress && typeof onProgress === 'object' && onProgress.callback) 
+          ? onProgress.callback 
+          : null;
+      return await this.pollForResult(jobId, progressCallback, abortCheck);
       
     } catch (error) {
       throw new Error(`Failed to analyze with MCP: ${error.message}`);
     }
   }
 
-  async pollForResult(jobId, onProgress = null) {
+  async pollForResult(jobId, onProgress = null, shouldAbort = null) {
     const pollInterval = 5000; // Poll every 5 seconds
     const maxAttempts = 200; // 200 * 5s = 1000s = ~16 minutes
     let attempts = 0;
@@ -119,10 +128,23 @@ export class FinChatClient {
     console.log(`Starting to poll for job ${jobId}`);
 
     while (attempts < maxAttempts) {
+      // Check if we should abort before waiting
+      if (shouldAbort && shouldAbort()) {
+        console.log(`Polling aborted for job ${jobId}`);
+        throw new Error('Analysis cancelled - restart requested');
+      }
+
       // Wait before polling (except for first attempt)
       if (attempts > 0) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
       }
+      
+      // Check again after waiting
+      if (shouldAbort && shouldAbort()) {
+        console.log(`Polling aborted for job ${jobId} after wait`);
+        throw new Error('Analysis cancelled - restart requested');
+      }
+      
       attempts++;
 
       try {
@@ -138,6 +160,12 @@ export class FinChatClient {
         const status = await response.json();
         console.log(`Job ${jobId} status response:`, JSON.stringify(status, null, 2));
         console.log(`Job ${jobId} status:`, status.status, status.progress !== undefined ? `(${status.progress}%)` : '');
+
+        // Check abort before processing status
+        if (shouldAbort && shouldAbort()) {
+          console.log(`Polling aborted for job ${jobId} during status check`);
+          throw new Error('Analysis cancelled - restart requested');
+        }
 
         // Call progress callback if provided
         if (onProgress) {
@@ -158,6 +186,10 @@ export class FinChatClient {
         console.log(`Job ${jobId} still processing, will check again in ${pollInterval/1000}s...`);
         
       } catch (error) {
+        // If aborted, re-throw immediately
+        if (error.message.includes('Analysis cancelled') || error.message.includes('restart requested')) {
+          throw error;
+        }
         // Only log non-critical errors (network issues, etc.)
         // Don't log if it's a failed status (that's handled above)
         if (!error.message.includes('Analysis failed')) {

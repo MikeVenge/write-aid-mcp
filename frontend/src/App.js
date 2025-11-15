@@ -182,9 +182,20 @@ function App() {
       return;
     }
     
+    // If analysis is already running, abort it immediately
+    if (isProcessing) {
+      console.log('Aborting current analysis to start new one');
+      analysisAbortRef.current = true;
+      setOutputText(''); // Clear output immediately
+      // Give the abort signal time to propagate to polling loop
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
     // Update the last analyzed text reference
     lastAnalyzedTextRef.current = paragraph;
     
+    // Reset abort flag BEFORE starting new analysis
+    analysisAbortRef.current = false;
     setIsProcessing(true);
     setOutputText(''); // Clear output when starting new analysis
     
@@ -196,12 +207,12 @@ function App() {
       }
       
       // Use MCP mode with polling
-      const result = await client.analyzeMCP('', paragraph, 'AI detection analysis', (progress, status) => {
-        // Progress callback for polling updates
-        // Check if analysis was aborted
-        if (analysisAbortRef.current) {
-          throw new Error('Analysis cancelled - text changed');
-        }
+      // Pass abort check function so polling can be cancelled
+      const result = await client.analyzeMCP('', paragraph, 'AI detection analysis', {
+        callback: (progress, status) => {
+          // Progress callback for polling updates
+        },
+        shouldAbort: () => analysisAbortRef.current
       });
       
       // Only set result if analysis wasn't aborted
@@ -213,9 +224,14 @@ function App() {
       }
     } catch (error) {
       // Don't show error if analysis was intentionally aborted
-      if (!analysisAbortRef.current && error.message !== 'Analysis cancelled - text changed') {
+      if (!analysisAbortRef.current && 
+          !error.message.includes('Analysis cancelled') && 
+          !error.message.includes('restart requested')) {
         console.error('Analysis error:', error);
         setOutputText(`⚠️ Error: ${error.message}`);
+      } else {
+        // Silently ignore aborted analyses
+        console.log('Analysis aborted:', error.message);
       }
     } finally {
       // Only reset processing state if not aborted (new analysis will set it)
@@ -223,7 +239,7 @@ function App() {
         setIsProcessing(false);
       }
     }
-  }, [inputText, client]);
+  }, [inputText, client, isProcessing]);
 
   const formatResult = (result) => {
     if (!result || result.trim().length === 0) {
@@ -314,8 +330,8 @@ function App() {
               <button 
                 className="go-button" 
                 onClick={handleAnalyze}
-                disabled={isProcessing || !inputText.trim()}
-                title="Start AI detection analysis"
+                disabled={!inputText.trim()}
+                title={isProcessing ? "Restart analysis with current text" : "Start AI detection analysis"}
               >
                 GO
               </button>
