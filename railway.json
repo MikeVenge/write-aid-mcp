@@ -8,6 +8,11 @@
     "startCommand": "python3 backend_server.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
-  }
+  },
+  "watchPatterns": [
+    "backend_server.py",
+    "mcp_client_fastmcp.py",
+    "requirements.txt"
+  ]
 }
 
