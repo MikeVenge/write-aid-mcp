@@ -172,7 +172,24 @@ export class FinChatClient {
         console.log(`Job ${jobId} status response:`, JSON.stringify(status, null, 2));
         console.log(`Job ${jobId} status:`, status.status, status.progress !== undefined ? `(${status.progress}%)` : '');
 
-        // Check abort before processing status
+        // Check for completion FIRST before checking abort
+        // This ensures we don't miss completed results
+        if (status.status === 'completed' || status.status === 'done' || status.status === 'success') {
+          console.log(`Job ${jobId} completed! Result length:`, status.result ? status.result.length : 0);
+          // Check abort after detecting completion - if aborted, don't return result
+          if (shouldAbort && shouldAbort()) {
+            console.log(`Polling aborted for job ${jobId} but result was completed`);
+            throw new Error('Analysis cancelled - restart requested');
+          }
+          return status.result || status.data || 'Analysis completed';
+        }
+
+        if (status.status === 'failed' || status.status === 'error') {
+          console.error(`Job ${jobId} failed:`, status.error || status.message);
+          throw new Error(status.error || status.message || 'Analysis failed');
+        }
+
+        // Check abort after checking completion/failure status
         if (shouldAbort && shouldAbort()) {
           console.log(`Polling aborted for job ${jobId} during status check`);
           throw new Error('Analysis cancelled - restart requested');
@@ -181,16 +198,6 @@ export class FinChatClient {
         // Call progress callback if provided
         if (onProgress) {
           onProgress(status.progress || 0, status.status);
-        }
-
-        if (status.status === 'completed') {
-          console.log(`Job ${jobId} completed! Result length:`, status.result ? status.result.length : 0);
-          return status.result || 'Analysis completed';
-        }
-
-        if (status.status === 'failed') {
-          console.error(`Job ${jobId} failed:`, status.error);
-          throw new Error(status.error || 'Analysis failed');
         }
 
         // Status is 'processing', continue polling
