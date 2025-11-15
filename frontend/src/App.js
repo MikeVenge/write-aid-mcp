@@ -10,6 +10,7 @@ function App() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isMCPConnected, setIsMCPConnected] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  const [showSameTextWarning, setShowSameTextWarning] = useState(false);
   const [client, setClient] = useState(null);
   const timerIntervalRef = useRef(null);
   const lastAnalyzedTextRef = useRef('');
@@ -166,6 +167,7 @@ function App() {
     setInputText('');
     setOutputText('');
     setShowWarning(false);
+    setShowSameTextWarning(false);
   };
 
   const handleAnalyze = useCallback(async () => {
@@ -180,6 +182,12 @@ function App() {
     const wordCount = countWords(paragraph);
     if (wordCount < 100) {
       setShowWarning(true);
+      return;
+    }
+    
+    // Check if text hasn't changed from last analysis
+    if (isProcessing && paragraph === lastAnalyzedTextRef.current) {
+      setShowSameTextWarning(true);
       return;
     }
     
@@ -322,6 +330,38 @@ function App() {
               <button 
                 className="modal-button" 
                 onClick={() => setShowWarning(false)}
+              >
+                OK, I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Same Text Warning Modal */}
+      {showSameTextWarning && (
+        <div className="modal-overlay" onClick={() => setShowSameTextWarning(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">⚠️ Same Text</h3>
+              <button 
+                className="modal-close" 
+                onClick={() => setShowSameTextWarning(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>If you want to start a new analysis, change the text and press the GO button.</p>
+              <p className="modal-explanation">
+                The current text is the same as the text being analyzed. Please modify the text before starting a new analysis.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="modal-button" 
+                onClick={() => setShowSameTextWarning(false)}
               >
                 OK, I Understand
               </button>
