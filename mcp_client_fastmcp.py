@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple MCP client to connect to and call the FinChat MCP server.
+Implements connection retry logic with exponential backoff and creates a new connection for each request.
 """
 
 import asyncio
@@ -16,33 +17,144 @@ except ImportError:
 
 
 class FinChatMCPClient:
-    """Client for connecting to the FinChat MCP server."""
+    """Client for connecting to the FinChat MCP server with retry logic and exponential backoff."""
     
-    def __init__(self, url: str = "https://finchat-api.adgo.dev/cot-mcp/68e8b27f658abfa9795c85da/sse"):
+    def __init__(
+        self, 
+        url: str = "https://finchat-api.adgo.dev/cot-mcp/68e8b27f658abfa9795c85da/sse",
+        max_retries: int = 3,
+        initial_retry_delay: float = 1.0,
+        max_retry_delay: float = 60.0,
+        connection_timeout: float = 30.0,
+        tool_timeout: float = 1200.0
+    ):
         """
         Initialize the MCP client.
         
         Args:
             url: The MCP server URL
+            max_retries: Maximum number of retry attempts (default: 3)
+            initial_retry_delay: Initial delay between retries in seconds (default: 1.0)
+            max_retry_delay: Maximum delay between retries in seconds (default: 60.0)
+            connection_timeout: Timeout for establishing connection in seconds (default: 30.0)
+            tool_timeout: Timeout for tool execution in seconds (default: 1200.0 = 20 minutes)
         """
         self.url = url
-        # Create client with extended timeout for long-running tools
-        # ai_detector takes ~10 minutes, so set timeout to 15 minutes (900 seconds)
-        self.client = Client(url, timeout=900.0)
+        self.max_retries = max_retries
+        self.initial_retry_delay = initial_retry_delay
+        self.max_retry_delay = max_retry_delay
+        self.connection_timeout = connection_timeout
+        self.tool_timeout = tool_timeout
+    
+    def _is_retryable_error(self, error: Exception) -> bool:
+        """
+        Determine if an error is retryable.
+        
+        Args:
+            error: The exception that occurred
+            
+        Returns:
+            True if the error is retryable, False otherwise
+        """
+        error_str = str(error).lower()
+        error_type = type(error).__name__
+        
+        # Retryable errors: connection issues, timeouts, network errors
+        retryable_patterns = [
+            'timeout',
+            'connection',
+            'network',
+            'unreachable',
+            'refused',
+            'reset',
+            'broken pipe',
+            'connection aborted',
+            'connection lost',
+            'temporary failure',
+            'service unavailable',
+            'gateway timeout',
+            'bad gateway',
+            '503',
+            '502',
+            '504'
+        ]
+        
+        # Non-retryable errors: validation errors, authentication errors, None results
+        non_retryable_patterns = [
+            'none',
+            'validation',
+            'invalid',
+            'authentication',
+            'authorization',
+            '401',
+            '403',
+            '400',
+            'malformed',
+            'syntax error'
+        ]
+        
+        # Check for non-retryable patterns first
+        for pattern in non_retryable_patterns:
+            if pattern in error_str:
+                return False
+        
+        # Check for retryable patterns
+        for pattern in retryable_patterns:
+            if pattern in error_str:
+                return True
+        
+        # Default: retry connection-related exceptions
+        retryable_types = [
+            'TimeoutError',
+            'ConnectionError',
+            'OSError',
+            'IOError',
+            'asyncio.TimeoutError'
+        ]
+        
+        return error_type in retryable_types
+    
+    def _calculate_backoff_delay(self, attempt: int) -> float:
+        """
+        Calculate exponential backoff delay for retry attempt.
+        
+        Args:
+            attempt: The current retry attempt (0-indexed)
+            
+        Returns:
+            Delay in seconds
+        """
+        # Exponential backoff: initial_delay * 2^attempt
+        delay = self.initial_retry_delay * (2 ** attempt)
+        # Cap at max_retry_delay
+        return min(delay, self.max_retry_delay)
+    
+    def _create_client(self) -> Client:
+        """
+        Create a new Client instance for each request.
+        This ensures a fresh connection for each request.
+        
+        Returns:
+            A new Client instance
+        """
+        return Client(self.url, timeout=self.tool_timeout)
     
     async def list_tools(self) -> list:
         """
         List all available tools on the MCP server.
+        Creates a new connection for each request.
         
         Returns:
             List of available tools with their schemas
         """
-        async with self.client:
-            return await self.client.list_tools()
+        client = self._create_client()
+        async with client:
+            return await client.list_tools()
     
     async def call_tool(self, tool_name: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """
-        Call a specific tool on the MCP server.
+        Call a specific tool on the MCP server with retry logic and exponential backoff.
+        Creates a new connection for each request attempt.
         
         Args:
             tool_name: The name of the tool to call
@@ -50,6 +162,10 @@ class FinChatMCPClient:
         
         Returns:
             The result from the tool execution
+            
+        Raises:
+            ValueError: If the tool execution fails after all retries or returns None
+            Exception: If a non-retryable error occurs
         """
         if params is None:
             params = {}
@@ -57,12 +173,32 @@ class FinChatMCPClient:
         print(f"\n{'='*60}")
         print(f"Calling tool: {tool_name}")
         print(f"Parameters: {params}")
+        print(f"Max retries: {self.max_retries}")
         print(f"{'='*60}\n")
         
-        async with self.client:
+        last_error = None
+        
+        # Retry loop with exponential backoff
+        for attempt in range(self.max_retries + 1):  # +1 because first attempt is not a retry
             try:
-                print("Sending request to MCP server...")
-                result = await self.client.call_tool(tool_name, params)
+                # Create a new client connection for each attempt
+                client = self._create_client()
+                
+                if attempt > 0:
+                    delay = self._calculate_backoff_delay(attempt - 1)
+                    print(f"Retry attempt {attempt}/{self.max_retries} after {delay:.2f} seconds...")
+                    await asyncio.sleep(delay)
+                
+                print(f"Attempt {attempt + 1}/{self.max_retries + 1}: Creating new connection to MCP server...")
+                
+                # Use connection timeout for establishing connection
+                # Use asyncio.wait_for for compatibility with Python < 3.11
+                async with client:
+                    print("Connection established. Sending request to MCP server...")
+                    result = await asyncio.wait_for(
+                        client.call_tool(tool_name, params),
+                        timeout=self.tool_timeout
+                    )
                 
                 # Check if result is None (this can happen if MCP server returns null)
                 if result is None:
@@ -114,16 +250,34 @@ class FinChatMCPClient:
                 
                 print(f"\n{'='*60}\n")
                 
+                # Success - return result
                 return result
                 
             except ValueError as ve:
-                # Re-raise ValueError (None result)
+                # ValueError (None result) is not retryable
+                print(f"\n{'='*60}")
+                print(f"Non-retryable error (ValueError): {ve}")
+                print(f"{'='*60}\n")
                 raise
+                
+            except asyncio.TimeoutError as te:
+                last_error = te
+                error_msg = f"Connection timeout after {self.connection_timeout}s"
+                print(f"\n{'='*60}")
+                print(f"Timeout error on attempt {attempt + 1}: {error_msg}")
+                print(f"{'='*60}\n")
+                
+                if attempt < self.max_retries and self._is_retryable_error(te):
+                    print(f"Retryable error detected. Will retry...")
+                    continue
+                else:
+                    raise ValueError(f"Connection timeout: {error_msg}") from te
+                    
             except ToolError as te:
-                # Handle FastMCP ToolError specifically
+                last_error = te
                 error_msg = str(te)
                 print(f"\n{'='*60}")
-                print(f"FastMCP ToolError:")
+                print(f"FastMCP ToolError on attempt {attempt + 1}:")
                 print(f"Error message: {error_msg}")
                 
                 # Check if this is the None result error
@@ -134,17 +288,28 @@ class FinChatMCPClient:
                     raise ValueError(better_msg) from te
                 
                 print(f"{'='*60}\n")
-                import traceback
-                traceback.print_exc()
-                raise ValueError(f"Tool execution failed: {error_msg}") from te
+                
+                # Check if retryable
+                if attempt < self.max_retries and self._is_retryable_error(te):
+                    print(f"Retryable error detected. Will retry...")
+                    continue
+                else:
+                    import traceback
+                    traceback.print_exc()
+                    raise ValueError(f"Tool execution failed: {error_msg}") from te
+                    
             except Exception as e:
+                last_error = e
+                error_type = type(e).__name__
+                error_msg = str(e)
+                
                 print(f"\n{'='*60}")
-                print(f"ERROR in call_tool:")
-                print(f"Error type: {type(e).__name__}")
-                print(f"Error message: {str(e)}")
+                print(f"ERROR in call_tool (attempt {attempt + 1}/{self.max_retries + 1}):")
+                print(f"Error type: {error_type}")
+                print(f"Error message: {error_msg}")
                 
                 # Check if this is the specific FastMCP None error
-                if "'NoneType' object has no attribute 'to_mcp_result'" in str(e):
+                if "'NoneType' object has no attribute 'to_mcp_result'" in error_msg:
                     error_msg = f"MCP server returned None/null response for tool '{tool_name}'. The tool may have failed or the response was malformed."
                     print(f"Detected FastMCP None result error - {error_msg}")
                     print(f"{'='*60}\n")
@@ -157,23 +322,43 @@ class FinChatMCPClient:
                     print(f"Error attributes: {e.__dict__}")
                 
                 print(f"{'='*60}\n")
-                import traceback
-                traceback.print_exc()
-                raise
+                
+                # Check if retryable
+                if attempt < self.max_retries and self._is_retryable_error(e):
+                    print(f"Retryable error detected. Will retry...")
+                    continue
+                else:
+                    import traceback
+                    traceback.print_exc()
+                    raise
+        
+        # All retries exhausted
+        error_summary = f"Failed after {self.max_retries + 1} attempts"
+        if last_error:
+            error_summary += f": {type(last_error).__name__}: {str(last_error)}"
+        
+        print(f"\n{'='*60}")
+        print(f"ERROR: {error_summary}")
+        print(f"{'='*60}\n")
+        
+        raise ValueError(f"Tool execution failed after {self.max_retries + 1} attempts: {error_summary}") from last_error
     
     async def list_resources(self) -> list:
         """
         List all available resources on the MCP server.
+        Creates a new connection for each request.
         
         Returns:
             List of available resources
         """
-        async with self.client:
-            return await self.client.list_resources()
+        client = self._create_client()
+        async with client:
+            return await client.list_resources()
     
     async def read_resource(self, uri: str) -> Any:
         """
         Read a specific resource from the MCP server.
+        Creates a new connection for each request.
         
         Args:
             uri: The URI of the resource to read
@@ -181,22 +366,26 @@ class FinChatMCPClient:
         Returns:
             The resource content
         """
-        async with self.client:
-            return await self.client.read_resource(uri)
+        client = self._create_client()
+        async with client:
+            return await client.read_resource(uri)
     
     async def list_prompts(self) -> list:
         """
         List all available prompts on the MCP server.
+        Creates a new connection for each request.
         
         Returns:
             List of available prompts
         """
-        async with self.client:
-            return await self.client.list_prompts()
+        client = self._create_client()
+        async with client:
+            return await client.list_prompts()
     
     async def get_prompt(self, prompt_name: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """
         Get a specific prompt from the MCP server.
+        Creates a new connection for each request.
         
         Args:
             prompt_name: The name of the prompt to get
@@ -208,8 +397,9 @@ class FinChatMCPClient:
         if params is None:
             params = {}
         
-        async with self.client:
-            return await self.client.get_prompt(prompt_name, params)
+        client = self._create_client()
+        async with client:
+            return await client.get_prompt(prompt_name, params)
 
 
 # Example usage
