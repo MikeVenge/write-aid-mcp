@@ -130,13 +130,24 @@ export class FinChatClient {
     while (attempts < maxAttempts) {
       // Check if we should abort before waiting
       if (shouldAbort && shouldAbort()) {
-        console.log(`Polling aborted for job ${jobId}`);
+        console.log(`Polling aborted for job ${jobId} - immediate stop`);
         throw new Error('Analysis cancelled - restart requested');
       }
 
       // Wait before polling (except for first attempt)
+      // Use smaller intervals to check abort more frequently
       if (attempts > 0) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        // Break wait into smaller chunks to check abort more frequently
+        const chunkSize = 500; // Check every 500ms instead of waiting full 5 seconds
+        const chunks = Math.ceil(pollInterval / chunkSize);
+        for (let i = 0; i < chunks; i++) {
+          await new Promise(resolve => setTimeout(resolve, chunkSize));
+          // Check abort during wait
+          if (shouldAbort && shouldAbort()) {
+            console.log(`Polling aborted for job ${jobId} during wait`);
+            throw new Error('Analysis cancelled - restart requested');
+          }
+        }
       }
       
       // Check again after waiting

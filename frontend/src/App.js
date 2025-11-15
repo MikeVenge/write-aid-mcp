@@ -14,6 +14,7 @@ function App() {
   const timerIntervalRef = useRef(null);
   const lastAnalyzedTextRef = useRef('');
   const analysisAbortRef = useRef(false);
+  const currentAnalysisPromiseRef = useRef(null);
 
   // Initialize FinChat client
   useEffect(() => {
@@ -182,13 +183,27 @@ function App() {
       return;
     }
     
+    // Store whether we were already processing (before state changes)
+    const wasProcessing = isProcessing;
+    
     // If analysis is already running, abort it immediately
-    if (isProcessing) {
+    if (wasProcessing) {
       console.log('Aborting current analysis to start new one');
       analysisAbortRef.current = true;
       setOutputText(''); // Clear output immediately
-      // Give the abort signal time to propagate to polling loop
-      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Cancel the current analysis promise if it exists
+      if (currentAnalysisPromiseRef.current) {
+        // The promise will be rejected when abort is detected in polling
+        currentAnalysisPromiseRef.current = null;
+      }
+      
+      // Reset timer immediately
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      setElapsedTime(0);
     }
     
     // Update the last analyzed text reference
@@ -196,8 +211,20 @@ function App() {
     
     // Reset abort flag BEFORE starting new analysis
     analysisAbortRef.current = false;
-    setIsProcessing(true);
     setOutputText(''); // Clear output when starting new analysis
+    
+    // Reset timer to 0 when starting new analysis
+    setElapsedTime(0);
+    
+    // Set processing state
+    setIsProcessing(true);
+    
+    // Manually restart timer if we were already processing (useEffect won't trigger if isProcessing was already true)
+    if (wasProcessing) {
+      timerIntervalRef.current = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    }
     
     try {
       if (!client || !client.isConnected()) {
@@ -208,12 +235,20 @@ function App() {
       
       // Use MCP mode with polling
       // Pass abort check function so polling can be cancelled
-      const result = await client.analyzeMCP('', paragraph, 'AI detection analysis', {
+      const analysisPromise = client.analyzeMCP('', paragraph, 'AI detection analysis', {
         callback: (progress, status) => {
           // Progress callback for polling updates
         },
         shouldAbort: () => analysisAbortRef.current
       });
+      
+      // Store the promise reference so we can track it
+      currentAnalysisPromiseRef.current = analysisPromise;
+      
+      const result = await analysisPromise;
+      
+      // Clear the promise reference after completion
+      currentAnalysisPromiseRef.current = null;
       
       // Only set result if analysis wasn't aborted
       if (!analysisAbortRef.current) {
@@ -223,6 +258,9 @@ function App() {
         playBellSound();
       }
     } catch (error) {
+      // Clear the promise reference on error
+      currentAnalysisPromiseRef.current = null;
+      
       // Don't show error if analysis was intentionally aborted
       if (!analysisAbortRef.current && 
           !error.message.includes('Analysis cancelled') && 
