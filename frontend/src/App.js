@@ -12,6 +12,8 @@ function App() {
   const [showWarning, setShowWarning] = useState(false);
   const [client, setClient] = useState(null);
   const timerIntervalRef = useRef(null);
+  const lastAnalyzedTextRef = useRef('');
+  const analysisAbortRef = useRef(false);
 
   // Initialize FinChat client
   useEffect(() => {
@@ -53,6 +55,38 @@ function App() {
       }
     };
   }, [isProcessing]);
+
+  // Restart analysis if input text changes while processing
+  useEffect(() => {
+    // Only restart if currently processing and text has changed from what was analyzed
+    if (isProcessing && inputText.trim() !== lastAnalyzedTextRef.current && inputText.trim().length > 0) {
+      const wordCount = countWords(inputText.trim());
+      // Only restart if new text meets minimum word requirement
+      if (wordCount >= 100) {
+        // Debounce: wait 1 second after user stops typing before restarting
+        const debounceTimer = setTimeout(() => {
+          // Double-check conditions haven't changed
+          const currentText = inputText.trim();
+          if (isProcessing && currentText !== lastAnalyzedTextRef.current && currentText.length > 0) {
+            const currentWordCount = countWords(currentText);
+            if (currentWordCount >= 100) {
+              // Clear output and restart analysis
+              setOutputText('');
+              analysisAbortRef.current = true;
+              // Small delay to ensure state updates, then restart
+              setTimeout(() => {
+                analysisAbortRef.current = false;
+                handleAnalyze();
+              }, 100);
+            }
+          }
+        }, 1000); // 1 second debounce
+        
+        return () => clearTimeout(debounceTimer);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputText, isProcessing]);
 
   // Format elapsed time as MM:SS
   const formatTime = (seconds) => {
@@ -148,7 +182,11 @@ function App() {
       return;
     }
     
+    // Update the last analyzed text reference
+    lastAnalyzedTextRef.current = paragraph;
+    
     setIsProcessing(true);
+    setOutputText(''); // Clear output when starting new analysis
     
     try {
       if (!client || !client.isConnected()) {
@@ -160,17 +198,30 @@ function App() {
       // Use MCP mode with polling
       const result = await client.analyzeMCP('', paragraph, 'AI detection analysis', (progress, status) => {
         // Progress callback for polling updates
+        // Check if analysis was aborted
+        if (analysisAbortRef.current) {
+          throw new Error('Analysis cancelled - text changed');
+        }
       });
       
-      setOutputText(formatResult(result));
-      
-      // Play bell sound 3 times when analysis completes
-      playBellSound();
+      // Only set result if analysis wasn't aborted
+      if (!analysisAbortRef.current) {
+        setOutputText(formatResult(result));
+        
+        // Play bell sound 3 times when analysis completes
+        playBellSound();
+      }
     } catch (error) {
-      console.error('Analysis error:', error);
-      setOutputText(`⚠️ Error: ${error.message}`);
+      // Don't show error if analysis was intentionally aborted
+      if (!analysisAbortRef.current && error.message !== 'Analysis cancelled - text changed') {
+        console.error('Analysis error:', error);
+        setOutputText(`⚠️ Error: ${error.message}`);
+      }
     } finally {
-      setIsProcessing(false);
+      // Only reset processing state if not aborted (new analysis will set it)
+      if (!analysisAbortRef.current) {
+        setIsProcessing(false);
+      }
     }
   }, [inputText, client]);
 
@@ -269,6 +320,10 @@ function App() {
                 GO
               </button>
             </div>
+          </div>
+          <div className="info-message">
+            <span className="info-icon">ℹ️</span>
+            <span>Analysis takes approximately 9 minutes. Minimum 100 words required.</span>
           </div>
           <div className="text-area-wrapper">
             <textarea
