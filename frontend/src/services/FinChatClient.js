@@ -29,12 +29,16 @@ export class FinChatClient {
         
         if (configResponse.ok) {
           const config = await configResponse.json();
-          this.mcpEnabled = config.mcp_enabled || false;
+          // Support both mcp_enabled (old) and cot_enabled (new)
+          this.mcpEnabled = config.cot_enabled || config.mcp_enabled || false;
           this.connected = true;
           
           console.log('✓ FinChat client initialized');
           console.log(`  Backend URL: ${this.backendUrl}`);
-          console.log(`  MCP Enabled: ${this.mcpEnabled}`);
+          console.log(`  COT/MCP Enabled: ${this.mcpEnabled}`);
+          if (config.cot_slug) {
+            console.log(`  COT Slug: ${config.cot_slug}`);
+          }
           
           return true;
         } else {
