@@ -28,15 +28,19 @@ jobs: Dict[str, Dict] = {}
 # COT configuration
 COT_SLUG = os.getenv('COT_SLUG', 'ai-detector-v2')
 FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
-FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')
+FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
 
 
 def get_cot_client() -> Optional[FinChatCOTClient]:
     """Get COT client instance."""
-    if not FINCHAT_BASE_URL or not FINCHAT_API_TOKEN:
+    if not FINCHAT_BASE_URL:
         return None
     try:
-        return FinChatCOTClient(base_url=FINCHAT_BASE_URL, api_token=FINCHAT_API_TOKEN)
+        # Pass token only if provided (it's optional)
+        return FinChatCOTClient(
+            base_url=FINCHAT_BASE_URL,
+            api_token=FINCHAT_API_TOKEN if FINCHAT_API_TOKEN else None
+        )
     except Exception as e:
         print(f"Error creating COT client: {e}")
         return None
@@ -61,7 +65,7 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
         client = get_cot_client()
         if not client:
             jobs[job_id]['status'] = 'failed'
-            jobs[job_id]['error'] = 'COT API not configured. Set FINCHAT_BASE_URL and FINCHAT_API_TOKEN environment variables.'
+            jobs[job_id]['error'] = 'COT API not configured. Set FINCHAT_BASE_URL environment variable.'
             return
         
         jobs[job_id]['progress'] = 10
@@ -101,7 +105,7 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
-    cot_configured = bool(FINCHAT_BASE_URL and FINCHAT_API_TOKEN)
+    cot_configured = bool(FINCHAT_BASE_URL)
     return jsonify({
         'status': 'ok',
         'cot_configured': cot_configured,
@@ -113,7 +117,7 @@ def health():
 @app.route('/api/config', methods=['GET'])
 def config():
     """Get configuration status."""
-    cot_enabled = bool(FINCHAT_BASE_URL and FINCHAT_API_TOKEN)
+    cot_enabled = bool(FINCHAT_BASE_URL)
     
     return jsonify({
         'cot_enabled': cot_enabled,
@@ -138,9 +142,9 @@ def mcp_analyze():
             return jsonify({'error': 'No text provided'}), 400
         
         # Check if COT API is configured
-        if not FINCHAT_BASE_URL or not FINCHAT_API_TOKEN:
+        if not FINCHAT_BASE_URL:
             return jsonify({
-                'error': 'COT API not configured. Set FINCHAT_BASE_URL and FINCHAT_API_TOKEN environment variables.'
+                'error': 'COT API not configured. Set FINCHAT_BASE_URL environment variable.'
             }), 500
         
         # Create job
@@ -209,10 +213,14 @@ if __name__ == '__main__':
     print("="*60)
     print(f"Port: {port}")
     print(f"Debug: {debug}")
-    print(f"COT Configured: {bool(FINCHAT_BASE_URL and FINCHAT_API_TOKEN)}")
+    print(f"COT Configured: {bool(FINCHAT_BASE_URL)}")
     if FINCHAT_BASE_URL:
         print(f"Base URL: {FINCHAT_BASE_URL}")
     print(f"COT Slug: {COT_SLUG}")
+    if FINCHAT_API_TOKEN:
+        print(f"API Token: {'*' * min(len(FINCHAT_API_TOKEN), 20)}... (configured)")
+    else:
+        print("API Token: Not set (using unauthenticated requests)")
     print("="*60)
     print()
     

@@ -14,7 +14,7 @@ def test_cot_client():
     
     # Get configuration from environment
     base_url = os.getenv('FINCHAT_BASE_URL', '')
-    api_token = os.getenv('FINCHAT_API_TOKEN', '')
+    api_token = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
     cot_slug = os.getenv('COT_SLUG', 'ai-detector-v2')
     
     # Check configuration
@@ -23,17 +23,15 @@ def test_cot_client():
         print("   Set it with: export FINCHAT_BASE_URL='https://finchat-api.adgo.dev'")
         return False
     
-    if not api_token:
-        print("❌ ERROR: FINCHAT_API_TOKEN environment variable not set")
-        print("   Set it with: export FINCHAT_API_TOKEN='your_token_here'")
-        return False
-    
     print("="*70)
     print("FinChat COT Client Test")
     print("="*70)
     print(f"Base URL: {base_url}")
     print(f"COT Slug: {cot_slug}")
-    print(f"API Token: {'*' * min(len(api_token), 20)}...")
+    if api_token:
+        print(f"API Token: {'*' * min(len(api_token), 20)}... (configured)")
+    else:
+        print("API Token: Not set (using unauthenticated requests)")
     print()
     
     # Sample test text
@@ -51,8 +49,15 @@ def test_cot_client():
     try:
         # Create client
         print("1. Creating COT client...")
-        client = FinChatCOTClient(base_url=base_url, api_token=api_token)
+        client = FinChatCOTClient(
+            base_url=base_url,
+            api_token=api_token if api_token else None
+        )
         print("   ✓ Client created")
+        if api_token:
+            print("   ✓ Using authenticated requests")
+        else:
+            print("   ✓ Using unauthenticated requests")
         print()
         
         # Define progress callback

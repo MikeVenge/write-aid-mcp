@@ -16,18 +16,22 @@ def test_client_creation():
     print("="*70)
     
     base_url = os.getenv('FINCHAT_BASE_URL', '')
-    api_token = os.getenv('FINCHAT_API_TOKEN', '')
+    api_token = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
     
-    if not base_url or not api_token:
-        print("⚠️  Skipping - Environment variables not set")
-        print("   Set FINCHAT_BASE_URL and FINCHAT_API_TOKEN to test")
+    if not base_url:
+        print("⚠️  Skipping - FINCHAT_BASE_URL not set")
+        print("   Set FINCHAT_BASE_URL to test")
         return False
     
     try:
-        client = FinChatCOTClient(base_url=base_url, api_token=api_token)
+        client = FinChatCOTClient(
+            base_url=base_url,
+            api_token=api_token if api_token else None
+        )
         print(f"✓ Client created successfully")
         print(f"  Base URL: {client.base_url}")
-        print(f"  Headers configured: {'Authorization' in client.headers}")
+        print(f"  Headers: {list(client.headers.keys())}")
+        print(f"  Using auth: {'Authorization' in client.headers}")
         return True
     except Exception as e:
         print(f"✗ Failed to create client: {e}")
@@ -41,14 +45,17 @@ def test_session_creation():
     print("="*70)
     
     base_url = os.getenv('FINCHAT_BASE_URL', '')
-    api_token = os.getenv('FINCHAT_API_TOKEN', '')
+    api_token = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
     
-    if not base_url or not api_token:
-        print("⚠️  Skipping - Environment variables not set")
+    if not base_url:
+        print("⚠️  Skipping - FINCHAT_BASE_URL not set")
         return False
     
     try:
-        client = FinChatCOTClient(base_url=base_url, api_token=api_token)
+        client = FinChatCOTClient(
+            base_url=base_url,
+            api_token=api_token if api_token else None
+        )
         session = client.create_session(client_id="test-client-123")
         print(f"✓ Session created successfully")
         print(f"  Session ID: {session.get('id')}")
@@ -118,10 +125,10 @@ def main():
     if all_passed:
         print("✓ All tests passed!")
     else:
-        print("⚠️  Some tests were skipped (require environment variables)")
+        print("⚠️  Some tests were skipped (require FINCHAT_BASE_URL)")
         print("\nTo run full tests, set:")
         print("  export FINCHAT_BASE_URL='https://finchat-api.adgo.dev'")
-        print("  export FINCHAT_API_TOKEN='your_token_here'")
+        print("  # FINCHAT_API_TOKEN is optional (only if authentication is required)")
     
     return 0 if all_passed else 0  # Return 0 even if skipped
 

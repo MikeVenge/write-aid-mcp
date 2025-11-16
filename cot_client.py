@@ -20,20 +20,20 @@ class FinChatCOTClient:
         
         Args:
             base_url: FinChat API base URL (defaults to FINCHAT_BASE_URL env var)
-            api_token: API bearer token (defaults to FINCHAT_API_TOKEN env var)
+            api_token: API bearer token (optional, defaults to FINCHAT_API_TOKEN env var if set)
         """
         self.base_url = base_url or os.getenv('FINCHAT_BASE_URL', '').rstrip('/')
         self.api_token = api_token or os.getenv('FINCHAT_API_TOKEN', '')
         
         if not self.base_url:
             raise ValueError("FINCHAT_BASE_URL must be set")
-        if not self.api_token:
-            raise ValueError("FINCHAT_API_TOKEN must be set")
         
+        # Build headers - only include Authorization if token is provided
         self.headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {self.api_token}'
+            'Content-Type': 'application/json'
         }
+        if self.api_token:
+            self.headers['Authorization'] = f'Bearer {self.api_token}'
     
     def create_session(self, client_id: Optional[str] = None, data_source: str = 'alpha_vantage') -> Dict[str, Any]:
         """
