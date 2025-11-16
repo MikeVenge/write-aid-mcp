@@ -201,7 +201,7 @@ export class FinChatClient {
 
         // Call progress callback if provided
         if (onProgress) {
-          onProgress(status.progress || 0, status.status);
+          onProgress(status.progress || 0, status.status, status.status_message || '');
         }
 
         // Status is 'processing', continue polling

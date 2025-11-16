@@ -8,6 +8,8 @@ function App() {
   const [outputText, setOutputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [progressStatus, setProgressStatus] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0);
   const [isMCPConnected, setIsMCPConnected] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [showSameTextWarning, setShowSameTextWarning] = useState(false);
@@ -166,6 +168,8 @@ function App() {
   const handleReset = () => {
     setInputText('');
     setOutputText('');
+    setProgressStatus('');
+    setProgressPercent(0);
     setShowWarning(false);
     setShowSameTextWarning(false);
   };
@@ -219,15 +223,17 @@ function App() {
     // Update the last analyzed text reference
     lastAnalyzedTextRef.current = paragraph;
     
-    // Reset abort flag BEFORE starting new analysis
-    analysisAbortRef.current = false;
-    setOutputText(''); // Clear output when starting new analysis
-    
-    // Reset timer to 0 when starting new analysis
-    setElapsedTime(0);
-    
-    // Set processing state
-    setIsProcessing(true);
+      // Reset abort flag BEFORE starting new analysis
+      analysisAbortRef.current = false;
+      setOutputText(''); // Clear output when starting new analysis
+      setProgressStatus('Initializing...');
+      setProgressPercent(0);
+      
+      // Reset timer to 0 when starting new analysis
+      setElapsedTime(0);
+      
+      // Set processing state
+      setIsProcessing(true);
     
     // Manually restart timer if we were already processing (useEffect won't trigger if isProcessing was already true)
     if (wasProcessing) {
@@ -246,8 +252,10 @@ function App() {
       // Use MCP mode with polling
       // Pass abort check function so polling can be cancelled
       const analysisPromise = client.analyzeMCP('', paragraph, 'AI detection analysis', {
-        callback: (progress, status) => {
+        callback: (progress, status, statusMessage) => {
           // Progress callback for polling updates
+          setProgressPercent(progress || 0);
+          setProgressStatus(statusMessage || status || 'Processing...');
         },
         shouldAbort: () => analysisAbortRef.current
       });
@@ -263,6 +271,8 @@ function App() {
       // Only set result if analysis wasn't aborted
       if (!analysisAbortRef.current) {
         setOutputText(formatResult(result));
+        setProgressStatus('Completed');
+        setProgressPercent(100);
         
         // Play bell sound 3 times when analysis completes
         playBellSound();
@@ -285,6 +295,7 @@ function App() {
       // Only reset processing state if not aborted (new analysis will set it)
       if (!analysisAbortRef.current) {
         setIsProcessing(false);
+        // Keep progress status visible even after completion
       }
     }
   }, [inputText, client, isProcessing]);
@@ -382,6 +393,15 @@ function App() {
           <div className="timer-display">
             <span className="timer-label">Analysis Time:</span>
             <span className="timer-value">{formatTime(elapsedTime)}</span>
+            {progressStatus && (
+              <>
+                <span className="timer-separator">•</span>
+                <span className="progress-status">{progressStatus}</span>
+                {progressPercent > 0 && (
+                  <span className="progress-percent">({progressPercent}%)</span>
+                )}
+              </>
+            )}
           </div>
         )}
       </header>
@@ -451,6 +471,21 @@ function App() {
             {outputText ? (
               <div className="text-output-markdown">
                 <ReactMarkdown>{outputText}</ReactMarkdown>
+              </div>
+            ) : isProcessing && progressStatus ? (
+              <div className="text-output-placeholder processing-status">
+                <div className="processing-spinner">⏳</div>
+                <div className="processing-text">
+                  <div className="processing-status-message">{progressStatus}</div>
+                  {progressPercent > 0 && (
+                    <div className="processing-progress-bar">
+                      <div 
+                        className="processing-progress-fill" 
+                        style={{ width: `${progressPercent}%` }}
+                      ></div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-output-placeholder">Results here...</div>
