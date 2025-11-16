@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Backend server for AI Checker with MCP support.
-Handles MCP analysis requests with job-based async processing.
+Backend server for AI Checker with FinChat COT API support.
+Handles COT analysis requests with job-based async processing.
 """
 
 import os
-import asyncio
 import uuid
 import threading
 from datetime import datetime
@@ -14,8 +13,8 @@ from flask_cors import CORS
 from typing import Dict, Optional
 import traceback
 
-# Import MCP client
-from mcp_client_fastmcp import FinChatMCPClient
+# Import COT client
+from cot_client import FinChatCOTClient
 
 app = Flask(__name__)
 
@@ -26,67 +25,68 @@ CORS(app, origins=cors_origins)
 # Job storage (in production, use Redis or a database)
 jobs: Dict[str, Dict] = {}
 
-# MCP client configuration
-MCP_URL = os.getenv('FINCHAT_MCP_URL', '')
+# COT configuration
+COT_SLUG = os.getenv('COT_SLUG', 'ai-detector-v2')
+FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
+FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')
 
 
-def get_mcp_client() -> Optional[FinChatMCPClient]:
-    """Get MCP client instance."""
-    if not MCP_URL:
+def get_cot_client() -> Optional[FinChatCOTClient]:
+    """Get COT client instance."""
+    if not FINCHAT_BASE_URL or not FINCHAT_API_TOKEN:
         return None
-    return FinChatMCPClient(url=MCP_URL)
-
-
-def run_async_task(coro):
-    """Run async coroutine in a new event loop."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        return FinChatCOTClient(base_url=FINCHAT_BASE_URL, api_token=FINCHAT_API_TOKEN)
+    except Exception as e:
+        print(f"Error creating COT client: {e}")
+        return None
 
 
-def process_mcp_analysis(job_id: str, text: str, purpose: str):
-    """Process MCP analysis in background thread."""
+def progress_callback(job_id: str):
+    """Create a progress callback function for a specific job."""
+    def callback(progress: int, status: str):
+        if job_id in jobs:
+            jobs[job_id]['progress'] = progress
+            jobs[job_id]['status_message'] = status
+    return callback
+
+
+def process_cot_analysis(job_id: str, text: str, purpose: str):
+    """Process COT analysis in background thread."""
     try:
         jobs[job_id]['status'] = 'processing'
-        jobs[job_id]['progress'] = 10
+        jobs[job_id]['progress'] = 5
+        jobs[job_id]['status_message'] = 'Initializing...'
         
-        client = get_mcp_client()
+        client = get_cot_client()
         if not client:
             jobs[job_id]['status'] = 'failed'
-            jobs[job_id]['error'] = 'MCP not configured'
+            jobs[job_id]['error'] = 'COT API not configured. Set FINCHAT_BASE_URL and FINCHAT_API_TOKEN environment variables.'
             return
         
-        jobs[job_id]['progress'] = 20
+        jobs[job_id]['progress'] = 10
+        jobs[job_id]['status_message'] = 'Starting analysis...'
         
-        # Run async MCP call
-        result = run_async_task(client.call_tool("ai_detector", {
-            "text": text,
-            "purpose": purpose
-        }))
-        
-        jobs[job_id]['progress'] = 90
+        # Run COT with progress callback
+        callback = progress_callback(job_id)
+        result = client.run_cot_complete(
+            cot_slug=COT_SLUG,
+            parameters={
+                'text': text,
+                'purpose': purpose
+            },
+            progress_callback=callback
+        )
         
         # Extract result content
-        if hasattr(result, 'content'):
-            content_parts = []
-            for item in result.content:
-                if hasattr(item, 'type') and item.type == 'text':
-                    content_parts.append(item.text)
-                elif hasattr(item, 'text'):
-                    content_parts.append(item.text)
-                else:
-                    content_parts.append(str(item))
-            
-            analysis_text = '\n'.join(content_parts)
-        else:
-            analysis_text = str(result)
+        content = result.get('content', '')
+        if not content:
+            content = result.get('content_translated', '')
         
         jobs[job_id]['status'] = 'completed'
         jobs[job_id]['progress'] = 100
-        jobs[job_id]['result'] = analysis_text
+        jobs[job_id]['status_message'] = 'Completed'
+        jobs[job_id]['result'] = content
         jobs[job_id]['completed_at'] = datetime.utcnow().isoformat()
         
     except Exception as e:
@@ -101,9 +101,11 @@ def process_mcp_analysis(job_id: str, text: str, purpose: str):
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
+    cot_configured = bool(FINCHAT_BASE_URL and FINCHAT_API_TOKEN)
     return jsonify({
         'status': 'ok',
-        'mcp_configured': bool(MCP_URL),
+        'cot_configured': cot_configured,
+        'cot_slug': COT_SLUG if cot_configured else None,
         'timestamp': datetime.utcnow().isoformat()
     })
 
@@ -111,33 +113,19 @@ def health():
 @app.route('/api/config', methods=['GET'])
 def config():
     """Get configuration status."""
-    mcp_enabled = bool(MCP_URL)
-    mcp_session_id = None
-    mcp_url = None
-    
-    if MCP_URL:
-        # Extract session ID from URL
-        # Format: https://finchat-api.adgo.dev/cot-mcp/{session_id}/sse
-        try:
-            parts = MCP_URL.split('/cot-mcp/')
-            if len(parts) > 1:
-                session_part = parts[1].split('/')[0]
-                mcp_session_id = session_part
-            mcp_url = MCP_URL
-        except:
-            pass
+    cot_enabled = bool(FINCHAT_BASE_URL and FINCHAT_API_TOKEN)
     
     return jsonify({
-        'mcp_enabled': mcp_enabled,
-        'mcp_session_id': mcp_session_id,
-        'mcp_url': mcp_url if mcp_enabled else None,
-        'configured': mcp_enabled
+        'cot_enabled': cot_enabled,
+        'cot_slug': COT_SLUG if cot_enabled else None,
+        'base_url': FINCHAT_BASE_URL if cot_enabled else None,
+        'configured': cot_enabled
     })
 
 
 @app.route('/api/mcp/analyze', methods=['POST'])
 def mcp_analyze():
-    """Start MCP analysis job."""
+    """Start COT analysis job (kept endpoint name for backward compatibility)."""
     try:
         data = request.get_json()
         if not data:
@@ -149,10 +137,10 @@ def mcp_analyze():
         if not text:
             return jsonify({'error': 'No text provided'}), 400
         
-        # Check if MCP is configured
-        if not MCP_URL:
+        # Check if COT API is configured
+        if not FINCHAT_BASE_URL or not FINCHAT_API_TOKEN:
             return jsonify({
-                'error': 'MCP not configured. Set FINCHAT_MCP_URL environment variable.'
+                'error': 'COT API not configured. Set FINCHAT_BASE_URL and FINCHAT_API_TOKEN environment variables.'
             }), 500
         
         # Create job
@@ -160,6 +148,7 @@ def mcp_analyze():
         jobs[job_id] = {
             'status': 'pending',
             'progress': 0,
+            'status_message': 'Queued',
             'created_at': datetime.utcnow().isoformat(),
             'text': text[:100] + '...' if len(text) > 100 else text,  # Store preview
             'purpose': purpose
@@ -167,7 +156,7 @@ def mcp_analyze():
         
         # Start background processing
         thread = threading.Thread(
-            target=process_mcp_analysis,
+            target=process_cot_analysis,
             args=(job_id, text, purpose),
             daemon=True
         )
@@ -188,7 +177,7 @@ def mcp_analyze():
 
 @app.route('/api/mcp/status/<job_id>', methods=['GET'])
 def mcp_status(job_id: str):
-    """Get MCP analysis job status."""
+    """Get COT analysis job status (kept endpoint name for backward compatibility)."""
     if job_id not in jobs:
         return jsonify({'error': 'Job not found'}), 404
     
@@ -197,7 +186,8 @@ def mcp_status(job_id: str):
     response = {
         'job_id': job_id,
         'status': job['status'],
-        'progress': job.get('progress', 0)
+        'progress': job.get('progress', 0),
+        'status_message': job.get('status_message', '')
     }
     
     if job['status'] == 'completed':
@@ -219,9 +209,10 @@ if __name__ == '__main__':
     print("="*60)
     print(f"Port: {port}")
     print(f"Debug: {debug}")
-    print(f"MCP Configured: {bool(MCP_URL)}")
-    if MCP_URL:
-        print(f"MCP URL: {MCP_URL}")
+    print(f"COT Configured: {bool(FINCHAT_BASE_URL and FINCHAT_API_TOKEN)}")
+    if FINCHAT_BASE_URL:
+        print(f"Base URL: {FINCHAT_BASE_URL}")
+    print(f"COT Slug: {COT_SLUG}")
     print("="*60)
     print()
     
