@@ -21,12 +21,14 @@ app = Flask(__name__)
 # Configure CORS
 cors_origins_env = os.getenv('CORS_ORIGINS', '*')
 # Handle both comma-separated list and single value
-if cors_origins_env == '*':
+if cors_origins_env == '*' or cors_origins_env.strip() == '':
     cors_origins = '*'  # Allow all origins
+    print(f"CORS configured: Allowing all origins (*)")
 else:
     # Split by comma and strip whitespace
     cors_origins = [origin.strip() for origin in cors_origins_env.split(',') if origin.strip()]
-CORS(app, origins=cors_origins)
+    print(f"CORS configured: Allowing origins: {cors_origins}")
+CORS(app, origins=cors_origins, supports_credentials=True)
 
 # Job storage (in production, use Redis or a database)
 jobs: Dict[str, Dict] = {}
