@@ -15,6 +15,7 @@ function App() {
   const [showSameTextWarning, setShowSameTextWarning] = useState(false);
   const [client, setClient] = useState(null);
   const timerIntervalRef = useRef(null);
+  const analysisStartTimeRef = useRef(null); // Store start timestamp instead of counting
   const lastAnalyzedTextRef = useRef('');
   const analysisAbortRef = useRef(false);
   const currentAnalysisPromiseRef = useRef(null);
@@ -37,19 +38,27 @@ function App() {
   }, []);
 
   // Timer effect - updates elapsed time when processing
+  // Uses actual timestamp difference instead of counting to work when tab is in background
   useEffect(() => {
     if (isProcessing) {
-      // Start timer
+      // Store start time
+      analysisStartTimeRef.current = Date.now();
       setElapsedTime(0);
+      
+      // Update timer based on actual elapsed time (not counting)
       timerIntervalRef.current = setInterval(() => {
-        setElapsedTime(prev => prev + 1);
-      }, 1000);
+        if (analysisStartTimeRef.current) {
+          const elapsed = Math.floor((Date.now() - analysisStartTimeRef.current) / 1000);
+          setElapsedTime(elapsed);
+        }
+      }, 100); // Update every 100ms for smooth display, but calculate from actual time
     } else {
       // Stop timer
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
+      analysisStartTimeRef.current = null;
     }
 
     // Cleanup on unmount
@@ -57,6 +66,7 @@ function App() {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
       }
+      analysisStartTimeRef.current = null;
     };
   }, [isProcessing]);
 
@@ -217,6 +227,7 @@ function App() {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
+      analysisStartTimeRef.current = null;
       setElapsedTime(0);
     }
     
@@ -229,7 +240,8 @@ function App() {
       setProgressStatus('Initializing...');
       setProgressPercent(0);
       
-      // Reset timer to 0 when starting new analysis
+      // Reset timer - will be set by useEffect when isProcessing becomes true
+      analysisStartTimeRef.current = null;
       setElapsedTime(0);
       
       // Set processing state
