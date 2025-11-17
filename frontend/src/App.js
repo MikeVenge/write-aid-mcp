@@ -114,7 +114,7 @@ function App() {
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
 
-  // Play bell sound 3 times
+  // Play bell sound 3 times - MAXIMUM VOLUME
   const playBellSound = async () => {
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -123,8 +123,8 @@ function App() {
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
       }
-      
-      // Create a bell-like sound using oscillators
+
+      // Create a bell-like sound using oscillators - MAXIMUM VOLUME
       const playBell = (delay) => {
         setTimeout(() => {
           const oscillator = audioContext.createOscillator();
@@ -137,16 +137,16 @@ function App() {
           oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
           oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.3);
           
-          // Envelope for bell-like decay
+          // Envelope for bell-like decay - MAXIMUM VOLUME (gain 1.0 = 100%)
           gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-          gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+          gainNode.gain.linearRampToValueAtTime(1.0, audioContext.currentTime + 0.01); // Peak at maximum volume
+          gainNode.gain.exponentialRampToValueAtTime(0.1, audioContext.currentTime + 0.6); // Longer decay, louder sustain
           
           oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.5);
+          oscillator.stop(audioContext.currentTime + 0.6); // Longer duration for more impact
         }, delay);
       };
-      
+
       // Play bell 3 times with delays
       playBell(0);      // First bell immediately
       playBell(300);    // Second bell after 300ms
