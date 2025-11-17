@@ -9,7 +9,7 @@ import uuid
 import threading
 from datetime import datetime
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from typing import Dict, Optional
 import traceback
 
@@ -18,7 +18,7 @@ from cot_client import FinChatCOTClient
 
 app = Flask(__name__)
 
-# Configure CORS
+# Configure CORS - allow all origins by default
 cors_origins_env = os.getenv('CORS_ORIGINS', '*')
 # Handle both comma-separated list and single value
 if cors_origins_env == '*' or cors_origins_env.strip() == '':
@@ -28,7 +28,12 @@ else:
     # Split by comma and strip whitespace
     cors_origins = [origin.strip() for origin in cors_origins_env.split(',') if origin.strip()]
     print(f"CORS configured: Allowing origins: {cors_origins}")
-CORS(app, origins=cors_origins, supports_credentials=True)
+# Configure CORS with explicit options
+CORS(app, 
+     origins=cors_origins,
+     supports_credentials=True,
+     allow_headers=['Content-Type', 'Authorization'],
+     methods=['GET', 'POST', 'OPTIONS'])
 
 # Job storage (in production, use Redis or a database)
 jobs: Dict[str, Dict] = {}
@@ -110,32 +115,44 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
         jobs[job_id]['completed_at'] = datetime.utcnow().isoformat()
 
 
-@app.route('/health', methods=['GET'])
+@app.route('/health', methods=['GET', 'OPTIONS'])
 def health():
     """Health check endpoint."""
     cot_configured = bool(FINCHAT_BASE_URL)
-    return jsonify({
+    response = jsonify({
         'status': 'ok',
         'cot_configured': cot_configured,
         'cot_slug': COT_SLUG if cot_configured else None,
         'timestamp': datetime.utcnow().isoformat()
     })
+    # Explicitly set CORS headers as fallback
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    return response
 
 
-@app.route('/api/config', methods=['GET'])
+@app.route('/api/config', methods=['GET', 'OPTIONS'])
+@cross_origin()
 def config():
     """Get configuration status."""
     cot_enabled = bool(FINCHAT_BASE_URL)
     
-    return jsonify({
+    response = jsonify({
         'cot_enabled': cot_enabled,
         'cot_slug': COT_SLUG if cot_enabled else None,
         'base_url': FINCHAT_BASE_URL if cot_enabled else None,
         'configured': cot_enabled
     })
+    # Explicitly set CORS headers as fallback
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    return response
 
 
-@app.route('/api/mcp/analyze', methods=['POST'])
+@app.route('/api/mcp/analyze', methods=['POST', 'OPTIONS'])
+@cross_origin()
 def mcp_analyze():
     """Start COT analysis job (kept endpoint name for backward compatibility)."""
     try:
@@ -174,11 +191,15 @@ def mcp_analyze():
         )
         thread.start()
         
-        return jsonify({
+        response = jsonify({
             'job_id': job_id,
             'status': 'pending',
             'message': 'Analysis job started'
-        }), 202
+        })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return response, 202
         
     except Exception as e:
         error_msg = str(e)
@@ -187,7 +208,8 @@ def mcp_analyze():
         return jsonify({'error': error_msg}), 500
 
 
-@app.route('/api/mcp/status/<job_id>', methods=['GET'])
+@app.route('/api/mcp/status/<job_id>', methods=['GET', 'OPTIONS'])
+@cross_origin()
 def mcp_status(job_id: str):
     """Get COT analysis job status (kept endpoint name for backward compatibility)."""
     if job_id not in jobs:
@@ -195,7 +217,7 @@ def mcp_status(job_id: str):
     
     job = jobs[job_id]
     
-    response = {
+    response_data = {
         'job_id': job_id,
         'status': job['status'],
         'progress': job.get('progress', 0),
@@ -203,13 +225,18 @@ def mcp_status(job_id: str):
     }
     
     if job['status'] == 'completed':
-        response['result'] = job.get('result', '')
-        response['completed_at'] = job.get('completed_at')
+        response_data['result'] = job.get('result', '')
+        response_data['completed_at'] = job.get('completed_at')
     elif job['status'] == 'failed':
-        response['error'] = job.get('error', 'Unknown error')
-        response['completed_at'] = job.get('completed_at')
+        response_data['error'] = job.get('error', 'Unknown error')
+        response_data['completed_at'] = job.get('completed_at')
     
-    return jsonify(response)
+    response = jsonify(response_data)
+    # Explicitly set CORS headers as fallback
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    return response
 
 
 if __name__ == '__main__':
