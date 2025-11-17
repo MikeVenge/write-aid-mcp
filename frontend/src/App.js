@@ -247,12 +247,7 @@ function App() {
       // Set processing state
       setIsProcessing(true);
     
-    // Manually restart timer if we were already processing (useEffect won't trigger if isProcessing was already true)
-    if (wasProcessing) {
-      timerIntervalRef.current = setInterval(() => {
-        setElapsedTime(prev => prev + 1);
-      }, 1000);
-    }
+    // Timer will be automatically started by useEffect when isProcessing becomes true
     
     try {
       if (!client || !client.isConnected()) {
