@@ -52,8 +52,9 @@ DEBUG = False
 
 **Optional (if you have a frontend):**
 ```
-CORS_ORIGINS = https://your-frontend-domain.com
+CORS_ORIGINS = https://www.writeaid.me,https://writeaid-me.vercel.app
 ```
+Note: Use comma-separated list for multiple domains. Default is `*` (allows all origins).
 
 ## Quick Reference
 

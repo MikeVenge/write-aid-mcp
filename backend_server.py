@@ -19,7 +19,13 @@ from cot_client import FinChatCOTClient
 app = Flask(__name__)
 
 # Configure CORS
-cors_origins = os.getenv('CORS_ORIGINS', '*').split(',')
+cors_origins_env = os.getenv('CORS_ORIGINS', '*')
+# Handle both comma-separated list and single value
+if cors_origins_env == '*':
+    cors_origins = '*'  # Allow all origins
+else:
+    # Split by comma and strip whitespace
+    cors_origins = [origin.strip() for origin in cors_origins_env.split(',') if origin.strip()]
 CORS(app, origins=cors_origins)
 
 # Job storage (in production, use Redis or a database)
