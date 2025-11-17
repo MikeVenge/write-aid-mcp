@@ -392,7 +392,6 @@ function App() {
 
       <header>
         <h1 className="title">
-          <span className={`status-light ${isMCPConnected ? 'status-connected' : 'status-disconnected'}`}></span>
           <span className="title-write-aid">Write Aid</span>{' '}
           <span className="title-ai-checker">AI Checker</span>
         </h1>
