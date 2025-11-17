@@ -116,20 +116,16 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
 
 
 @app.route('/health', methods=['GET', 'OPTIONS'])
+@cross_origin()
 def health():
     """Health check endpoint."""
     cot_configured = bool(FINCHAT_BASE_URL)
-    response = jsonify({
+    return jsonify({
         'status': 'ok',
         'cot_configured': cot_configured,
         'cot_slug': COT_SLUG if cot_configured else None,
         'timestamp': datetime.utcnow().isoformat()
     })
-    # Explicitly set CORS headers as fallback
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    return response
 
 
 @app.route('/api/config', methods=['GET', 'OPTIONS'])
@@ -138,17 +134,12 @@ def config():
     """Get configuration status."""
     cot_enabled = bool(FINCHAT_BASE_URL)
     
-    response = jsonify({
+    return jsonify({
         'cot_enabled': cot_enabled,
         'cot_slug': COT_SLUG if cot_enabled else None,
         'base_url': FINCHAT_BASE_URL if cot_enabled else None,
         'configured': cot_enabled
     })
-    # Explicitly set CORS headers as fallback
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    return response
 
 
 @app.route('/api/mcp/analyze', methods=['POST', 'OPTIONS'])
@@ -191,15 +182,11 @@ def mcp_analyze():
         )
         thread.start()
         
-        response = jsonify({
+        return jsonify({
             'job_id': job_id,
             'status': 'pending',
             'message': 'Analysis job started'
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response, 202
+        }), 202
         
     except Exception as e:
         error_msg = str(e)
@@ -217,7 +204,7 @@ def mcp_status(job_id: str):
     
     job = jobs[job_id]
     
-    response_data = {
+    response = {
         'job_id': job_id,
         'status': job['status'],
         'progress': job.get('progress', 0),
@@ -225,18 +212,13 @@ def mcp_status(job_id: str):
     }
     
     if job['status'] == 'completed':
-        response_data['result'] = job.get('result', '')
-        response_data['completed_at'] = job.get('completed_at')
+        response['result'] = job.get('result', '')
+        response['completed_at'] = job.get('completed_at')
     elif job['status'] == 'failed':
-        response_data['error'] = job.get('error', 'Unknown error')
-        response_data['completed_at'] = job.get('completed_at')
+        response['error'] = job.get('error', 'Unknown error')
+        response['completed_at'] = job.get('completed_at')
     
-    response = jsonify(response_data)
-    # Explicitly set CORS headers as fallback
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    return response
+    return jsonify(response)
 
 
 if __name__ == '__main__':
