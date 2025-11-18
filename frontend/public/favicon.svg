@@ -1,4 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <circle cx="50" cy="50" r="50" fill="#0066cc"/>
+  <!-- Human head profile (left side, facing left) -->
+  <path d="M 20 30 Q 20 15, 35 15 Q 50 15, 50 30 Q 50 45, 35 45 Q 20 45, 20 30 Z" 
+        fill="none" 
+        stroke="#0066cc" 
+        stroke-width="2"/>
+  
+  <!-- Network/mind map inside head (interconnected circles) -->
+  <circle cx="32" cy="25" r="3" fill="#0066cc"/>
+  <circle cx="38" cy="30" r="3" fill="#0066cc"/>
+  <circle cx="32" cy="35" r="3" fill="#0066cc"/>
+  <circle cx="42" cy="30" r="3" fill="#0066cc"/>
+  <line x1="32" y1="25" x2="38" y2="30" stroke="#0066cc" stroke-width="1"/>
+  <line x1="38" y1="30" x2="32" y2="35" stroke="#0066cc" stroke-width="1"/>
+  <line x1="38" y1="30" x2="42" y2="30" stroke="#0066cc" stroke-width="1"/>
+  
+  <!-- Large checkmark overlapping the head -->
+  <path d="M 25 35 L 35 45 L 50 25" 
+        fill="none" 
+        stroke="#0066cc" 
+        stroke-width="4" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <!-- Fountain pen (lower right) -->
+  <line x1="65" y1="55" x2="75" y2="70" 
+        stroke="#003366" 
+        stroke-width="3" 
+        stroke-linecap="round"/>
+  <line x1="75" y1="70" x2="80" y2="75" 
+        stroke="#003366" 
+        stroke-width="2" 
+        stroke-linecap="round"/>
+  <circle cx="65" cy="55" r="2" fill="#003366"/>
+  
+  <!-- Lines of text below pen -->
+  <line x1="70" y1="80" x2="85" y2="80" 
+        stroke="#003366" 
+        stroke-width="1.5" 
+        stroke-linecap="round"/>
+  <line x1="70" y1="85" x2="85" y2="85" 
+        stroke="#003366" 
+        stroke-width="1.5" 
+        stroke-linecap="round"/>
 </svg>
-
