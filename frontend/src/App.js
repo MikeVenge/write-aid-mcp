@@ -76,14 +76,14 @@ function App() {
     if (isProcessing && inputText.trim() !== lastAnalyzedTextRef.current && inputText.trim().length > 0) {
       const wordCount = countWords(inputText.trim());
       // Only restart if new text meets minimum word requirement
-      if (wordCount >= 100) {
+      if (wordCount >= 250) {
         // Debounce: wait 1 second after user stops typing before restarting
         const debounceTimer = setTimeout(() => {
           // Double-check conditions haven't changed
           const currentText = inputText.trim();
           if (isProcessing && currentText !== lastAnalyzedTextRef.current && currentText.length > 0) {
             const currentWordCount = countWords(currentText);
-            if (currentWordCount >= 100) {
+            if (currentWordCount >= 250) {
               // Clear output and restart analysis
               setOutputText('');
               analysisAbortRef.current = true;
@@ -192,9 +192,9 @@ function App() {
       return;
     }
     
-    // Check for minimum 100 words
+    // Check for minimum 250 words
     const wordCount = countWords(paragraph);
-    if (wordCount < 100) {
+    if (wordCount < 250) {
       setShowWarning(true);
       return;
     }
@@ -338,7 +338,7 @@ function App() {
               </button>
             </div>
             <div className="modal-body">
-              <p>Please provide at least <strong>100 words</strong> for accurate AI detection analysis.</p>
+              <p>Please provide at least <strong>250 words</strong> for accurate AI detection analysis.</p>
               <p className="modal-explanation">
                 The AI detection tool requires a minimum amount of text to properly analyze writing patterns and detect AI-generated content. Short phrases or single sentences may not provide enough context for reliable results.
               </p>
@@ -445,7 +445,7 @@ function App() {
           </div>
           <div className="info-message">
             <span className="info-icon">ℹ️</span>
-            <span>Analysis takes approximately 9 minutes. Minimum 100 words required.</span>
+            <span>Analysis takes approximately 9 minutes. Minimum 250 words required.</span>
           </div>
           <div className="text-area-wrapper">
             <textarea

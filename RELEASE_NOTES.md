@@ -5,8 +5,8 @@
 ### 🎯 Major Improvements
 
 #### 1. Enhanced User Experience
-- **Updated Minimum Word Requirement**: Increased from 5 words to **100 words minimum** for more accurate AI detection analysis
-- **Added Information Banner**: Clear messaging displays that analysis takes approximately **9 minutes** and requires a **minimum of 100 words**
+- **Updated Minimum Word Requirement**: Increased to **250 words minimum** for more accurate AI detection analysis
+- **Added Information Banner**: Clear messaging displays that analysis takes approximately **9 minutes** and requires a **minimum of 250 words**
 
 #### 2. Markdown Rendering
 - **Rich Text Output**: Analysis results now render markdown formatting properly
@@ -28,7 +28,7 @@
   - Output window automatically clears
   - Previous analysis is cancelled
   - New analysis starts automatically after 1 second of no typing (debounced)
-  - Only restarts if new text meets the 100-word minimum requirement
+  - Only restarts if new text meets the 250-word minimum requirement
 
 - **Immediate Restart on GO Button**: When users press GO while analysis is running:
   - Current analysis is immediately aborted

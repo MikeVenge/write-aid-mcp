@@ -113,7 +113,7 @@ BACKEND_URL: 'http://localhost:5001'
 ## Notes
 
 - **Analysis Time:** ~8-10 minutes per request (this is normal for the ai_detector tool)
-- **Text Length:** Works with any length, but best with 100+ words
+- **Text Length:** Requires minimum 250 words for accurate analysis
 - **Connection:** Requires internet connection to reach FinChat MCP server
 - **Port:** Backend runs on localhost:5001
 

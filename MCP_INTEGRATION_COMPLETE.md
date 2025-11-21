@@ -191,7 +191,7 @@ The tool returns a detailed analysis including:
 ## Performance Notes
 
 - **Analysis Time:** ~8-10 minutes per request
-- **Text Length:** Works best with 100+ words
+- **Text Length:** Requires minimum 250 words for accurate analysis
 - **Concurrent Requests:** Backend handles one request at a time
 - **Timeout:** Backend waits indefinitely for MCP response
 
