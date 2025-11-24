@@ -141,10 +141,8 @@ def process_cot_v2_analysis(job_id: str, text: str, purpose: str):
             progress_callback=callback
         )
         
-        # Extract result content
+        # Extract result content (v2 returns content directly)
         content = result.get('content', '')
-        if not content:
-            content = result.get('content_translated', '')
         
         jobs[job_id]['status'] = 'completed'
         jobs[job_id]['progress'] = 100
