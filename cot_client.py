@@ -246,4 +246,147 @@ class FinChatCOTClient:
             'content': result.get('content', ''),
             'content_translated': result.get('content_translated', '')
         }
+    
+    def poll_for_completion_v2(
+        self, 
+        session_id: str,
+        max_attempts: int = 180,
+        interval_seconds: int = 5,
+        progress_callback: Optional[callable] = None
+    ) -> Dict[str, Any]:
+        """
+        Poll for COT v2 completion by session_id.
+        
+        Args:
+            session_id: New session ID from v2 response
+            max_attempts: Maximum number of polling attempts
+            interval_seconds: Seconds between polling attempts
+            progress_callback: Optional callback(progress, status) for progress updates
+            
+        Returns:
+            Dictionary with 'result_id' and 'metadata'
+            
+        Raises:
+            TimeoutError: If COT doesn't complete within max_attempts
+            RuntimeError: If COT execution fails
+        """
+        # Poll the new session created by v2 API
+        url = f"{self.base_url}/api/v1/chats/"
+        params = {'session_id': session_id}
+        
+        for attempt in range(max_attempts):
+            try:
+                response = requests.get(url, params=params, headers=self.headers)
+                response.raise_for_status()
+                data = response.json()
+                chats = data.get('results', [])
+                
+                # Check all chats for errors or results
+                for chat in chats:
+                    # Check for errors
+                    if chat.get('intent') == 'error':
+                        error_msg = chat.get('message', 'COT execution failed')
+                        raise RuntimeError(f"COT execution failed: {error_msg}")
+                    
+                    # Check if complete (has result_id)
+                    result_id = chat.get('result_id')
+                    if result_id:
+                        metadata = chat.get('metadata', {})
+                        if progress_callback:
+                            progress_callback(100, 'completed')
+                        return {
+                            'chat_id': chat.get('id'),
+                            'result_id': result_id,
+                            'metadata': metadata
+                        }
+                
+                # Still running - check progress from metadata
+                for chat in chats:
+                    metadata = chat.get('metadata', {})
+                    if metadata and progress_callback:
+                        current_progress = metadata.get('current_progress', 0)
+                        total_progress = metadata.get('total_progress', 100)
+                        if total_progress > 0:
+                            progress = int((current_progress / total_progress * 100))
+                            current_step = metadata.get('current_step', 'Processing...')
+                            progress_callback(progress, current_step)
+                            break
+                else:
+                    if progress_callback:
+                        progress_callback(0, 'Waiting...')
+                
+                # Wait before next poll
+                time.sleep(interval_seconds)
+                
+            except requests.RequestException as e:
+                print(f"Error polling for completion (attempt {attempt + 1}): {e}")
+                if attempt < max_attempts - 1:
+                    time.sleep(interval_seconds)
+                    continue
+                raise
+        
+        raise TimeoutError(f"COT execution timed out after {max_attempts} attempts")
+    
+    def run_cot_v2(
+        self,
+        session_id: str,
+        paragraph: str,
+        progress_callback: Optional[callable] = None,
+        max_attempts: int = 180,
+        interval_seconds: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Run a COT prompt using API v2 with pre-existing session.
+        
+        Args:
+            session_id: Pre-existing session ID (e.g., '69055d25658abfb8d334cfd6')
+            paragraph: Text to process (for humanize-text COT)
+            progress_callback: Optional callback(progress, status) for progress updates
+            max_attempts: Maximum number of polling attempts
+            interval_seconds: Seconds between polling attempts
+            
+        Returns:
+            Dictionary with 'content', 'content_translated', 'session_id', 'result_id'
+        """
+        # Step 1: Run COT using v2 API
+        url = f"{self.base_url}/api/v2/sessions/run-cot/{session_id}/"
+        
+        # Correct payload format for humanize-text COT
+        payload = {
+            'paragraph': paragraph
+        }
+        
+        if progress_callback:
+            progress_callback(5, 'Starting COT execution...')
+        
+        response = requests.post(url, json=payload, headers=self.headers)
+        response.raise_for_status()
+        cot_response = response.json()
+        
+        # The response ID is actually a NEW session ID (not a chat ID)
+        new_session_id = cot_response.get('id')
+        
+        if not new_session_id:
+            raise RuntimeError(f"No session ID returned from COT execution. Response: {cot_response}")
+        
+        if progress_callback:
+            progress_callback(10, 'COT started, polling for results...')
+        
+        # Step 2: Poll the NEW session for completion
+        completion = self.poll_for_completion_v2(
+            new_session_id,
+            max_attempts=max_attempts,
+            interval_seconds=interval_seconds,
+            progress_callback=progress_callback
+        )
+        
+        # Step 3: Get results
+        result = self.get_result(completion['result_id'])
+        
+        return {
+            'session_id': new_session_id,
+            'result_id': completion['result_id'],
+            'content': result.get('content', ''),
+            'content_translated': result.get('content_translated', '')
+        }
 

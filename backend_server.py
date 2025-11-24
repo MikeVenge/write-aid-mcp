@@ -40,6 +40,7 @@ jobs: Dict[str, Dict] = {}
 
 # COT configuration
 COT_SLUG = os.getenv('COT_SLUG', 'ai-detector-v2')
+COT_V2_SESSION_ID = os.getenv('COT_V2_SESSION_ID', '69055d25658abfb8d334cfd6')  # GO2 session ID
 FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
 FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
 
@@ -109,6 +110,51 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
     except Exception as e:
         error_msg = str(e)
         print(f"Error processing job {job_id}: {error_msg}")
+        traceback.print_exc()
+        jobs[job_id]['status'] = 'failed'
+        jobs[job_id]['error'] = error_msg
+        jobs[job_id]['completed_at'] = datetime.utcnow().isoformat()
+
+
+def process_cot_v2_analysis(job_id: str, text: str, purpose: str):
+    """Process COT v2 analysis in background thread (for GO2 button)."""
+    try:
+        jobs[job_id]['status'] = 'processing'
+        jobs[job_id]['progress'] = 5
+        jobs[job_id]['status_message'] = 'Initializing v2...'
+        
+        client = get_cot_client()
+        if not client:
+            jobs[job_id]['status'] = 'failed'
+            jobs[job_id]['error'] = 'COT API not configured. Set FINCHAT_BASE_URL environment variable.'
+            return
+        
+        jobs[job_id]['progress'] = 10
+        jobs[job_id]['status_message'] = 'Starting v2 analysis...'
+        
+        # Run COT v2 with progress callback
+        # Note: v2 session uses 'humanize-text' COT which expects 'paragraph' parameter
+        callback = progress_callback(job_id)
+        result = client.run_cot_v2(
+            session_id=COT_V2_SESSION_ID,
+            paragraph=text,  # Pass text as 'paragraph' parameter
+            progress_callback=callback
+        )
+        
+        # Extract result content
+        content = result.get('content', '')
+        if not content:
+            content = result.get('content_translated', '')
+        
+        jobs[job_id]['status'] = 'completed'
+        jobs[job_id]['progress'] = 100
+        jobs[job_id]['status_message'] = 'Completed'
+        jobs[job_id]['result'] = content
+        jobs[job_id]['completed_at'] = datetime.utcnow().isoformat()
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error processing v2 job {job_id}: {error_msg}")
         traceback.print_exc()
         jobs[job_id]['status'] = 'failed'
         jobs[job_id]['error'] = error_msg
@@ -219,6 +265,60 @@ def mcp_status(job_id: str):
         response['completed_at'] = job.get('completed_at')
     
     return jsonify(response)
+
+
+@app.route('/api/mcp/analyze-v2', methods=['POST', 'OPTIONS'])
+@cross_origin()
+def mcp_analyze_v2():
+    """Start COT v2 analysis job (for GO2 button)."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        text = data.get('text') or data.get('paragraph') or data.get('sentence', '')
+        purpose = data.get('purpose', 'AI detection for content analysis')
+        
+        if not text:
+            return jsonify({'error': 'No text provided'}), 400
+        
+        # Check if COT API is configured
+        if not FINCHAT_BASE_URL:
+            return jsonify({
+                'error': 'COT API not configured. Set FINCHAT_BASE_URL environment variable.'
+            }), 500
+        
+        # Create job
+        job_id = str(uuid.uuid4())
+        jobs[job_id] = {
+            'status': 'pending',
+            'progress': 0,
+            'status_message': 'Queued',
+            'created_at': datetime.utcnow().isoformat(),
+            'text': text[:100] + '...' if len(text) > 100 else text,  # Store preview
+            'purpose': purpose,
+            'type': 'v2'  # Mark as v2 job
+        }
+        
+        # Start background processing
+        thread = threading.Thread(
+            target=process_cot_v2_analysis,
+            args=(job_id, text, purpose),
+            daemon=True
+        )
+        thread.start()
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'pending',
+            'message': 'Analysis v2 job started'
+        }), 202
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error starting v2 analysis: {error_msg}")
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
 
 
 if __name__ == '__main__':
