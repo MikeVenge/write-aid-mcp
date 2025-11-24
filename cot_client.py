@@ -7,6 +7,7 @@ Handles calling COT prompts via REST API instead of MCP.
 import os
 import time
 import requests
+import polling2
 from typing import Dict, Optional, Any
 import traceback
 
@@ -250,16 +251,17 @@ class FinChatCOTClient:
     def poll_for_completion_v2(
         self, 
         session_id: str,
-        max_attempts: int = 180,
+        timeout_seconds: int = 600,
         interval_seconds: int = 10,
         progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
         Poll for COT v2 completion using the correct v2 results endpoint.
+        Uses polling2 library for cleaner polling logic.
         
         Args:
             session_id: New session ID from v2 response
-            max_attempts: Maximum number of polling attempts
+            timeout_seconds: Maximum time to wait in seconds (default 600 = 10 minutes)
             interval_seconds: Seconds between polling attempts (default 10)
             progress_callback: Optional callback(progress, status) for progress updates
             
@@ -267,66 +269,65 @@ class FinChatCOTClient:
             Dictionary with 'content' from results
             
         Raises:
-            TimeoutError: If COT doesn't complete within max_attempts
+            TimeoutError: If COT doesn't complete within timeout
             RuntimeError: If COT execution fails
         """
         # Use the correct v2 results endpoint
         url = f"{self.base_url}/api/v2/sessions/{session_id}/results/"
         
-        for attempt in range(max_attempts):
-            try:
-                response = requests.get(url, headers=self.headers)
-                response.raise_for_status()
-                data = response.json()
-                
-                status = data.get('status')
-                results = data.get('results', [])
-                
-                if progress_callback:
-                    progress_callback(0, f'Status: {status}')
-                
-                # Check if idle and has results
-                if status == 'idle' and len(results) > 0:
-                    if progress_callback:
-                        progress_callback(100, 'completed')
-                    return {
-                        'content': results[0].get('content', ''),
-                        'results': results
-                    }
-                
-                # Still processing
-                if progress_callback:
-                    progress_callback(0, f'Status: {status}, waiting...')
-                
-                # Wait before next poll
-                time.sleep(interval_seconds)
-                
-            except requests.RequestException as e:
-                print(f"Error polling for completion (attempt {attempt + 1}): {e}")
-                if attempt < max_attempts - 1:
-                    time.sleep(interval_seconds)
-                    continue
-                raise
+        def fetch_results():
+            """Fetch results from v2 API."""
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            data = response.json()
+            
+            status = data.get('status')
+            if progress_callback:
+                progress_callback(0, f'Status: {status}')
+            
+            return data
         
-        raise TimeoutError(f"COT execution timed out after {max_attempts} attempts")
+        def check_success(res):
+            """Check if results are ready."""
+            return res["status"] == "idle" and len(res.get("results", [])) > 0
+        
+        try:
+            # Use polling2 library for clean polling
+            data = polling2.poll(
+                target=fetch_results,
+                check_success=check_success,
+                step=interval_seconds,
+                timeout=timeout_seconds,
+            )
+            
+            if progress_callback:
+                progress_callback(100, 'completed')
+            
+            return {
+                'content': data["results"][0].get('content', ''),
+                'results': data.get('results', [])
+            }
+            
+        except polling2.TimeoutException:
+            raise TimeoutError(f"COT execution timed out after {timeout_seconds} seconds")
     
     def run_cot_v2(
         self,
         session_id: str,
         paragraph: str,
         progress_callback: Optional[callable] = None,
-        max_attempts: int = 180,
+        timeout_seconds: int = 600,
         interval_seconds: int = 10
     ) -> Dict[str, Any]:
         """
         Run a COT prompt using API v2 with pre-existing session.
-        Uses the correct v2 polling endpoint.
+        Uses the correct v2 polling endpoint with polling2 library.
         
         Args:
             session_id: Pre-existing COT ID (e.g., '69055d25658abfb8d334cfd6')
             paragraph: Text to process (for humanize-text COT)
             progress_callback: Optional callback(progress, status) for progress updates
-            max_attempts: Maximum number of polling attempts (default 180 = 30 minutes)
+            timeout_seconds: Maximum time to wait in seconds (default 600 = 10 minutes)
             interval_seconds: Seconds between polling attempts (default 10)
             
         Returns:
@@ -359,7 +360,7 @@ class FinChatCOTClient:
         # Step 2: Poll using the correct v2 results endpoint
         result = self.poll_for_completion_v2(
             new_session_id,
-            max_attempts=max_attempts,
+            timeout_seconds=timeout_seconds,
             interval_seconds=interval_seconds,
             progress_callback=progress_callback
         )
