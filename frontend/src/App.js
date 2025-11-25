@@ -554,15 +554,15 @@ function App() {
                 disabled={!inputText.trim()}
                 title={isProcessing ? "Restart analysis with current text" : "Start AI detection analysis"}
               >
-                GO
+                Detect
               </button>
               <button 
                 className="go-button go2-button" 
                 onClick={handleAnalyzeGO2}
                 disabled={!inputText.trim()}
-                title={isProcessing ? "Restart GO2 analysis with current text" : "Start text humanization"}
+                title={isProcessing ? "Restart humanization with current text" : "Start text humanization"}
               >
-                GO2
+                Humanize
               </button>
             </div>
           </div>
