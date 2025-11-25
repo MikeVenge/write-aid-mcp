@@ -283,7 +283,11 @@ class FinChatCOTClient:
             
             status = data.get('status')
             if progress_callback:
-                progress_callback(0, f'Status: {status}')
+                # Transform status message for better UX
+                if status == 'loading':
+                    progress_callback(0, 'Processing')
+                else:
+                    progress_callback(0, f'Status: {status}')
             
             return data
         
