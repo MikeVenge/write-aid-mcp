@@ -14,6 +14,7 @@ function App() {
   const [showWarning, setShowWarning] = useState(false);
   const [showSameTextWarning, setShowSameTextWarning] = useState(false);
   const [client, setClient] = useState(null);
+  const [analysisType, setAnalysisType] = useState('GO'); // 'GO' or 'GO2'
   const timerIntervalRef = useRef(null);
   const analysisStartTimeRef = useRef(null); // Store start timestamp instead of counting
   const lastAnalyzedTextRef = useRef('');
@@ -239,6 +240,7 @@ function App() {
       setOutputText(''); // Clear output when starting new analysis
       setProgressStatus('Initializing...');
       setProgressPercent(0);
+      setAnalysisType('GO'); // Mark as GO analysis
       
       // Reset timer - will be set by useEffect when isProcessing becomes true
       analysisStartTimeRef.current = null;
@@ -277,7 +279,7 @@ function App() {
       
       // Only set result if analysis wasn't aborted
       if (!analysisAbortRef.current) {
-        setOutputText(formatResult(result));
+        setOutputText(formatResult(result, 'GO'));
         setProgressStatus('Completed');
         setProgressPercent(100);
         
@@ -307,14 +309,127 @@ function App() {
     }
   }, [inputText, client, isProcessing]);
 
-  const formatResult = (result) => {
+  const handleAnalyzeGO2 = useCallback(async () => {
+    const paragraph = inputText.trim();
+    
+    if (!paragraph) {
+      setOutputText('');
+      return;
+    }
+    
+    // Check for minimum 250 words
+    const wordCount = countWords(paragraph);
+    if (wordCount < 250) {
+      setShowWarning(true);
+      return;
+    }
+    
+    // Store whether we were already processing (before state changes)
+    const wasProcessing = isProcessing;
+    
+    // Check if text hasn't changed from last analysis (only if analysis is running)
+    if (wasProcessing && lastAnalyzedTextRef.current && paragraph === lastAnalyzedTextRef.current) {
+      setShowSameTextWarning(true);
+      return;
+    }
+    
+    // If analysis is already running, abort it immediately
+    if (wasProcessing) {
+      console.log('Aborting current analysis to start new GO2 analysis');
+      analysisAbortRef.current = true;
+      setOutputText('');
+      
+      if (currentAnalysisPromiseRef.current) {
+        currentAnalysisPromiseRef.current = null;
+      }
+      
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      analysisStartTimeRef.current = null;
+      setElapsedTime(0);
+    }
+    
+    // Update the last analyzed text reference
+    lastAnalyzedTextRef.current = paragraph;
+    
+    // Reset abort flag BEFORE starting new analysis
+    analysisAbortRef.current = false;
+    setOutputText('');
+    setProgressStatus('Initializing GO2...');
+    setProgressPercent(0);
+    setAnalysisType('GO2'); // Mark as GO2 analysis
+    
+    // Reset timer
+    analysisStartTimeRef.current = null;
+    setElapsedTime(0);
+    
+    // Set processing state
+    setIsProcessing(true);
+    
+    try {
+      if (!client || !client.isConnected()) {
+        setOutputText('⚠️ Backend not configured. Please check your connection.');
+        setIsProcessing(false);
+        return;
+      }
+      
+      // Use GO2 (v2) mode with polling
+      const analysisPromise = client.analyzeMCPv2('', paragraph, 'Text humanization', {
+        callback: (progress, status, statusMessage) => {
+          setProgressPercent(progress || 0);
+          setProgressStatus(statusMessage || status || 'Processing...');
+        },
+        shouldAbort: () => analysisAbortRef.current
+      });
+      
+      currentAnalysisPromiseRef.current = analysisPromise;
+      
+      const result = await analysisPromise;
+      
+      currentAnalysisPromiseRef.current = null;
+      
+      // Only set result if analysis wasn't aborted
+      if (!analysisAbortRef.current) {
+        setOutputText(formatResult(result, 'GO2'));
+        setProgressStatus('Completed');
+        setProgressPercent(100);
+        
+        // Play bell sound when GO2 completes
+        playBellSound();
+      }
+    } catch (error) {
+      currentAnalysisPromiseRef.current = null;
+      
+      if (!analysisAbortRef.current && 
+          !error.message.includes('Analysis cancelled') && 
+          !error.message.includes('restart requested')) {
+        console.error('GO2 analysis error:', error);
+        setOutputText(`⚠️ Error: ${error.message}`);
+      } else {
+        console.log('GO2 analysis aborted:', error.message);
+      }
+    } finally {
+      if (!analysisAbortRef.current) {
+        setIsProcessing(false);
+      }
+    }
+  }, [inputText, client, isProcessing]);
+
+  const formatResult = (result, type = 'GO') => {
     if (!result || result.trim().length === 0) {
       return 'No analysis result received.';
     }
     
     let output = '---\n\n';
-    output += '# AI DETECTION ANALYSIS\n';
-    output += '*(Powered by FinChat MCP)*\n\n';
+    if (type === 'GO2') {
+      output += '# TEXT HUMANIZATION\n';
+      output += '*(Powered by FinChat v2 API)*\n\n';
+    } else {
+      output += '# AI DETECTION ANALYSIS\n';
+      output += '*(Powered by FinChat MCP)*\n\n';
+    }
     output += '---\n\n';
     output += result;
     
@@ -440,6 +555,14 @@ function App() {
                 title={isProcessing ? "Restart analysis with current text" : "Start AI detection analysis"}
               >
                 GO
+              </button>
+              <button 
+                className="go-button go2-button" 
+                onClick={handleAnalyzeGO2}
+                disabled={!inputText.trim()}
+                title={isProcessing ? "Restart GO2 analysis with current text" : "Start text humanization"}
+              >
+                GO2
               </button>
             </div>
           </div>

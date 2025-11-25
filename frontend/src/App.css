@@ -464,6 +464,20 @@ header {
     transform: scale(0.98);
 }
 
+.go2-button {
+    background-color: #00aa00;
+    margin-left: 8px;
+}
+
+.go2-button:hover {
+    background-color: #008800;
+    transform: scale(1.05);
+}
+
+.go2-button:active {
+    transform: scale(0.98);
+}
+
 
 /* Modal Styles */
 .modal {

@@ -124,6 +124,62 @@ export class FinChatClient {
     }
   }
 
+  async analyzeMCPv2(sentence, paragraph, purpose = 'Text humanization', onProgress = null) {
+    if (!this.connected) {
+      throw new Error('Backend not connected. Please check your connection.');
+    }
+
+    try {
+      // Step 1: Start the GO2 analysis job
+      const response = await fetch(`${this.backendUrl}/api/mcp/analyze-v2`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: paragraph || sentence,
+          purpose: purpose
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ 
+          error: response.statusText 
+        }));
+        throw new Error(`Failed to start GO2 analysis: ${errorData.error || response.statusText}`);
+      }
+
+      const startData = await response.json();
+      console.log('GO2 analysis job started, response:', JSON.stringify(startData, null, 2));
+      
+      if (startData.error) {
+        throw new Error(startData.error);
+      }
+
+      const jobId = startData.job_id;
+      
+      if (!jobId) {
+        console.error('No job_id in start response:', startData);
+        throw new Error('No job ID received from server');
+      }
+
+      console.log(`Starting to poll for GO2 job ID: ${jobId}`);
+      // Step 2: Poll for results (same polling logic as GO button)
+      const abortCheck = onProgress && typeof onProgress === 'object' && onProgress.shouldAbort 
+        ? onProgress.shouldAbort 
+        : null;
+      const progressCallback = onProgress && typeof onProgress === 'function' 
+        ? onProgress 
+        : (onProgress && typeof onProgress === 'object' && onProgress.callback) 
+          ? onProgress.callback 
+          : null;
+      return await this.pollForResult(jobId, progressCallback, abortCheck);
+      
+    } catch (error) {
+      throw new Error(`Failed to analyze with GO2: ${error.message}`);
+    }
+  }
+
   async pollForResult(jobId, onProgress = null, shouldAbort = null) {
     const pollInterval = 5000; // Poll every 5 seconds
     const maxAttempts = 200; // 200 * 5s = 1000s = ~16 minutes
