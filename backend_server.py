@@ -40,7 +40,7 @@ jobs: Dict[str, Dict] = {}
 
 # COT configuration
 COT_SLUG = os.getenv('COT_SLUG', 'ai-detector-v2')
-COT_V2_SESSION_ID = os.getenv('COT_V2_SESSION_ID', '69055d25658abfb8d334cfd6')  # GO2 session ID
+COT_V2_SESSION_ID = os.getenv('COT_V2_SESSION_ID', '6923bb68658abf729a7b8994')  # GO2 session ID
 FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
 FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
 
