@@ -54,7 +54,7 @@ class FinChatCOTClient:
         if client_id:
             payload['client_id'] = client_id
         
-        response = requests.post(url, json=payload, headers=self.headers)
+        response = requests.post(url, json=payload, headers=self.headers, timeout=30)
         response.raise_for_status()
         return response.json()
     
@@ -83,7 +83,7 @@ class FinChatCOTClient:
             'message': cot_message
         }
         
-        response = requests.post(url, json=payload, headers=self.headers)
+        response = requests.post(url, json=payload, headers=self.headers, timeout=30)
         response.raise_for_status()
         return response.json()
     
@@ -104,7 +104,7 @@ class FinChatCOTClient:
             'page_size': page_size
         }
         
-        response = requests.get(url, params=params, headers=self.headers)
+        response = requests.get(url, params=params, headers=self.headers, timeout=30)
         response.raise_for_status()
         return response.json()
     
@@ -120,7 +120,7 @@ class FinChatCOTClient:
         """
         url = f"{self.base_url}/api/v1/results/{result_id}/"
         
-        response = requests.get(url, headers=self.headers)
+        response = requests.get(url, headers=self.headers, timeout=30)
         response.raise_for_status()
         return response.json()
     
@@ -251,8 +251,8 @@ class FinChatCOTClient:
     def poll_for_completion_v2(
         self, 
         session_id: str,
-        timeout_seconds: int = 600,
-        interval_seconds: int = 10,
+        timeout_seconds: int = 1200,
+        interval_seconds: int = 5,
         progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
@@ -261,8 +261,8 @@ class FinChatCOTClient:
         
         Args:
             session_id: New session ID from v2 response
-            timeout_seconds: Maximum time to wait in seconds (default 600 = 10 minutes)
-            interval_seconds: Seconds between polling attempts (default 10)
+            timeout_seconds: Maximum time to wait in seconds (default 1200 = 20 minutes)
+            interval_seconds: Seconds between polling attempts (default 5)
             progress_callback: Optional callback(progress, status) for progress updates
             
         Returns:
@@ -275,25 +275,57 @@ class FinChatCOTClient:
         # Use the correct v2 results endpoint
         url = f"{self.base_url}/api/v2/sessions/{session_id}/results/"
         
+        start_time = time.time()
+        attempt_count = 0
+        
         def fetch_results():
             """Fetch results from v2 API."""
-            response = requests.get(url, headers=self.headers)
+            nonlocal attempt_count
+            attempt_count += 1
+            
+            response = requests.get(url, headers=self.headers, timeout=30)
             response.raise_for_status()
             data = response.json()
             
             status = data.get('status')
+            
+            # Calculate estimated progress based on time elapsed
+            elapsed = time.time() - start_time
+            # Assume most COTs take 8-12 minutes, show progress accordingly
+            estimated_progress = min(int((elapsed / 600) * 90), 90)  # Max 90% until actually complete
+            
             if progress_callback:
-                # Transform status message for better UX
+                # Transform status message for better UX with progress
                 if status == 'loading':
-                    progress_callback(0, 'Processing')
+                    progress_callback(estimated_progress, f'Processing (attempt {attempt_count})...')
+                elif status == 'idle' and len(data.get('results', [])) > 0:
+                    progress_callback(100, 'Completed')
                 else:
-                    progress_callback(0, f'Status: {status}')
+                    progress_callback(estimated_progress, f'Status: {status} (attempt {attempt_count})')
+            
+            # Log polling status
+            print(f"[V2 Poll {attempt_count}] Status: {status}, Results: {len(data.get('results', []))}, Elapsed: {int(elapsed)}s")
             
             return data
         
         def check_success(res):
             """Check if results are ready."""
-            return res["status"] == "idle" and len(res.get("results", [])) > 0
+            # Check multiple success conditions for robustness
+            status = res.get("status")
+            results = res.get("results", [])
+            
+            # Success if status is idle/done/completed AND has results
+            is_complete = (
+                (status in ["idle", "done", "completed", "success"]) and 
+                len(results) > 0
+            )
+            
+            # Also check for error status
+            if status in ["error", "failed"]:
+                error_msg = res.get("error", "Unknown error")
+                raise RuntimeError(f"COT v2 execution failed: {error_msg}")
+            
+            return is_complete
         
         try:
             # Use polling2 library for clean polling
@@ -313,15 +345,19 @@ class FinChatCOTClient:
             }
             
         except polling2.TimeoutException:
-            raise TimeoutError(f"COT execution timed out after {timeout_seconds} seconds")
+            raise TimeoutError(f"COT v2 execution timed out after {timeout_seconds} seconds ({attempt_count} attempts)")
+        except requests.exceptions.Timeout:
+            raise TimeoutError(f"Network timeout while polling COT v2 results")
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"Network error while polling COT v2: {str(e)}")
     
     def run_cot_v2(
         self,
         session_id: str,
         paragraph: str,
         progress_callback: Optional[callable] = None,
-        timeout_seconds: int = 600,
-        interval_seconds: int = 10
+        timeout_seconds: int = 1200,
+        interval_seconds: int = 5
     ) -> Dict[str, Any]:
         """
         Run a COT prompt using API v2 with pre-existing session.
@@ -331,8 +367,8 @@ class FinChatCOTClient:
             session_id: Pre-existing COT ID (e.g., '69055d25658abfb8d334cfd6')
             paragraph: Text to process (for humanize-text COT)
             progress_callback: Optional callback(progress, status) for progress updates
-            timeout_seconds: Maximum time to wait in seconds (default 600 = 10 minutes)
-            interval_seconds: Seconds between polling attempts (default 10)
+            timeout_seconds: Maximum time to wait in seconds (default 1200 = 20 minutes)
+            interval_seconds: Seconds between polling attempts (default 5 seconds)
             
         Returns:
             Dictionary with 'content', 'session_id'
@@ -348,7 +384,8 @@ class FinChatCOTClient:
         if progress_callback:
             progress_callback(5, 'Starting COT execution...')
         
-        response = requests.post(url, json=payload, headers=self.headers)
+        # Add timeout to the initial POST request
+        response = requests.post(url, json=payload, headers=self.headers, timeout=60)
         response.raise_for_status()
         cot_response = response.json()
         
