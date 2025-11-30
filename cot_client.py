@@ -354,7 +354,8 @@ class FinChatCOTClient:
     def run_cot_v2(
         self,
         session_id: str,
-        paragraph: str,
+        text: str,
+        parameter_name: str = 'paragraph',
         progress_callback: Optional[callable] = None,
         timeout_seconds: int = 1200,
         interval_seconds: int = 5
@@ -365,7 +366,8 @@ class FinChatCOTClient:
         
         Args:
             session_id: Pre-existing COT ID (e.g., '69055d25658abfb8d334cfd6')
-            paragraph: Text to process (for humanize-text COT)
+            text: Text to process
+            parameter_name: Parameter name to use in payload ('text' or 'paragraph', default 'paragraph')
             progress_callback: Optional callback(progress, status) for progress updates
             timeout_seconds: Maximum time to wait in seconds (default 1200 = 20 minutes)
             interval_seconds: Seconds between polling attempts (default 5 seconds)
@@ -376,9 +378,10 @@ class FinChatCOTClient:
         # Step 1: Execute COT using v2 API
         url = f"{self.base_url}/api/v2/sessions/run-cot/{session_id}/"
         
-        # Payload format for humanize-text COT
+        # Payload format - use parameter_name to determine key
+        # ai-detector COT expects 'text', humanize-text COT expects 'paragraph'
         payload = {
-            'paragraph': paragraph
+            parameter_name: text
         }
         
         if progress_callback:

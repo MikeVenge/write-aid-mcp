@@ -86,11 +86,12 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
         jobs[job_id]['status_message'] = 'Starting analysis...'
         
         # Run COT v2 with progress callback (using v2 API like GO2)
-        # Uses session ID for ai-detector COT
+        # Uses session ID for ai-detector COT which expects 'text' parameter
         callback = progress_callback(job_id)
         result = client.run_cot_v2(
             session_id=COT_SESSION_ID,
-            paragraph=text,  # Pass text as 'paragraph' parameter
+            text=text,
+            parameter_name='text',  # ai-detector COT expects 'text' parameter
             progress_callback=callback
         )
         
@@ -133,7 +134,8 @@ def process_cot_v2_analysis(job_id: str, text: str, purpose: str):
         callback = progress_callback(job_id)
         result = client.run_cot_v2(
             session_id=COT_V2_SESSION_ID,
-            paragraph=text,  # Pass text as 'paragraph' parameter
+            text=text,
+            parameter_name='paragraph',  # humanize-text COT expects 'paragraph' parameter
             progress_callback=callback
         )
         
