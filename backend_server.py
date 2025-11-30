@@ -39,8 +39,8 @@ CORS(app,
 jobs: Dict[str, Dict] = {}
 
 # COT configuration
-COT_SLUG = os.getenv('COT_SLUG', 'ai-detector-v2')
-COT_V2_SESSION_ID = os.getenv('COT_V2_SESSION_ID', '6923bb68658abf729a7b8994')  # GO2 session ID
+COT_SESSION_ID = os.getenv('COT_SESSION_ID', '68e8b27f658abfa9795c85da')  # GO button session ID (v2 API)
+COT_V2_SESSION_ID = os.getenv('COT_V2_SESSION_ID', '6923bb68658abf729a7b8994')  # GO2 session ID (v2 API)
 FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
 FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
 
@@ -70,7 +70,7 @@ def progress_callback(job_id: str):
 
 
 def process_cot_analysis(job_id: str, text: str, purpose: str):
-    """Process COT analysis in background thread."""
+    """Process COT analysis in background thread (GO button - now using v2 API)."""
     try:
         jobs[job_id]['status'] = 'processing'
         jobs[job_id]['progress'] = 5
@@ -85,21 +85,17 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
         jobs[job_id]['progress'] = 10
         jobs[job_id]['status_message'] = 'Starting analysis...'
         
-        # Run COT with progress callback
+        # Run COT v2 with progress callback (using v2 API like GO2)
+        # Uses session ID for ai-detector COT
         callback = progress_callback(job_id)
-        result = client.run_cot_complete(
-            cot_slug=COT_SLUG,
-            parameters={
-                'text': text,
-                'purpose': purpose
-            },
+        result = client.run_cot_v2(
+            session_id=COT_SESSION_ID,
+            paragraph=text,  # Pass text as 'paragraph' parameter
             progress_callback=callback
         )
         
-        # Extract result content
+        # Extract result content (v2 returns content directly)
         content = result.get('content', '')
-        if not content:
-            content = result.get('content_translated', '')
         
         jobs[job_id]['status'] = 'completed'
         jobs[job_id]['progress'] = 100
@@ -167,7 +163,7 @@ def health():
     return jsonify({
         'status': 'ok',
         'cot_configured': cot_configured,
-        'cot_slug': COT_SLUG if cot_configured else None,
+        'cot_session_id': COT_SESSION_ID if cot_configured else None,
         'timestamp': datetime.utcnow().isoformat()
     })
 
@@ -180,7 +176,7 @@ def config():
     
     return jsonify({
         'cot_enabled': cot_enabled,
-        'cot_slug': COT_SLUG if cot_enabled else None,
+        'cot_session_id': COT_SESSION_ID if cot_enabled else None,
         'base_url': FINCHAT_BASE_URL if cot_enabled else None,
         'configured': cot_enabled
     })
@@ -331,7 +327,8 @@ if __name__ == '__main__':
     print(f"COT Configured: {bool(FINCHAT_BASE_URL)}")
     if FINCHAT_BASE_URL:
         print(f"Base URL: {FINCHAT_BASE_URL}")
-    print(f"COT Slug: {COT_SLUG}")
+    print(f"GO Session ID: {COT_SESSION_ID}")
+    print(f"GO2 Session ID: {COT_V2_SESSION_ID}")
     if FINCHAT_API_TOKEN:
         print(f"API Token: {'*' * min(len(FINCHAT_API_TOKEN), 20)}... (configured)")
     else:
