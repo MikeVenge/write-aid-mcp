@@ -297,11 +297,11 @@ class FinChatCOTClient:
             if progress_callback:
                 # Transform status message for better UX with progress
                 if status == 'loading':
-                    progress_callback(estimated_progress, f'Processing (attempt {attempt_count})...')
+                    progress_callback(estimated_progress, f'Processing ({attempt_count})...')
                 elif status == 'idle' and len(data.get('results', [])) > 0:
                     progress_callback(100, 'Completed')
                 else:
-                    progress_callback(estimated_progress, f'Status: {status} (attempt {attempt_count})')
+                    progress_callback(estimated_progress, f'Status: {status} ({attempt_count})')
             
             # Log polling status
             print(f"[V2 Poll {attempt_count}] Status: {status}, Results: {len(data.get('results', []))}, Elapsed: {int(elapsed)}s")
