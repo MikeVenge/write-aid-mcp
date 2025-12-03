@@ -380,15 +380,17 @@ class FinChatCOTClient:
         # Step 1: Execute COT using v2 API
         url = f"{self.base_url}/api/v2/sessions/run-cot/{session_id}/"
         
-        # Payload format - use parameter_name to determine key
-        # ai-detector COT expects 'text', humanize-text COT expects 'paragraph'
-        payload = {
-            parameter_name: text
-        }
+        # Payload format - build with correct parameter order
+        # If additional_params provided, add them first for proper ordering
+        payload = {}
         
-        # Add any additional parameters
+        # Add additional parameters first (e.g., 'purpose' before 'text')
         if additional_params:
             payload.update(additional_params)
+        
+        # Then add the main text parameter
+        # ai-detector COT expects 'text', humanize-text COT expects 'paragraph'
+        payload[parameter_name] = text
         
         if progress_callback:
             progress_callback(5, 'Starting COT execution...')
