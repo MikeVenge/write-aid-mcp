@@ -92,6 +92,7 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
             session_id=COT_SESSION_ID,
             text=text,
             parameter_name='text',  # ai-detector COT expects 'text' parameter
+            additional_params={'purpose': 'general'},  # ai-detector also expects 'purpose' parameter
             progress_callback=callback
         )
         

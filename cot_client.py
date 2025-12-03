@@ -356,6 +356,7 @@ class FinChatCOTClient:
         session_id: str,
         text: str,
         parameter_name: str = 'paragraph',
+        additional_params: Optional[Dict[str, str]] = None,
         progress_callback: Optional[callable] = None,
         timeout_seconds: int = 1200,
         interval_seconds: int = 5
@@ -368,6 +369,7 @@ class FinChatCOTClient:
             session_id: Pre-existing COT ID (e.g., '69055d25658abfb8d334cfd6')
             text: Text to process
             parameter_name: Parameter name to use in payload ('text' or 'paragraph', default 'paragraph')
+            additional_params: Optional dict of additional parameters to include in payload (e.g., {'purpose': 'general'})
             progress_callback: Optional callback(progress, status) for progress updates
             timeout_seconds: Maximum time to wait in seconds (default 1200 = 20 minutes)
             interval_seconds: Seconds between polling attempts (default 5 seconds)
@@ -383,6 +385,10 @@ class FinChatCOTClient:
         payload = {
             parameter_name: text
         }
+        
+        # Add any additional parameters
+        if additional_params:
+            payload.update(additional_params)
         
         if progress_callback:
             progress_callback(5, 'Starting COT execution...')
