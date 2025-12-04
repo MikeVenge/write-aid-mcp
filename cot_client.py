@@ -390,7 +390,8 @@ class FinChatCOTClient:
         
         # Then add the main text parameter
         # ai-detector COT expects 'text', humanize-text COT expects 'paragraph'
-        payload[parameter_name] = text
+        # Wrap text in triple quotes to clearly mark boundaries and handle embedded quotes
+        payload[parameter_name] = f'"""{text}"""'
         
         if progress_callback:
             progress_callback(5, 'Starting COT execution...')
