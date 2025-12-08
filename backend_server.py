@@ -301,10 +301,23 @@ def process_cot_v2_analysis(job_id: str, text: str, purpose: str):
 def health():
     """Health check endpoint."""
     cot_configured = bool(FINCHAT_BASE_URL)
+    
+    # Check if PDF file exists (for version verification)
+    pdf_exists = False
+    pdf_path = None
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        pdf_path = os.path.join(script_dir, PATTERNS_PDF_PATH)
+        pdf_exists = os.path.exists(pdf_path)
+    except Exception:
+        pass
+    
     return jsonify({
         'status': 'ok',
         'cot_configured': cot_configured,
         'cot_session_id': COT_SESSION_ID if cot_configured else None,
+        'pdf_file_exists': pdf_exists,
+        'pdf_path': pdf_path if pdf_exists else None,
         'timestamp': datetime.utcnow().isoformat()
     })
 
