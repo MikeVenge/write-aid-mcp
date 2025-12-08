@@ -5,6 +5,7 @@ Handles calling COT prompts via REST API instead of MCP.
 """
 
 import os
+import json
 import time
 import requests
 import polling2
@@ -36,27 +37,112 @@ class FinChatCOTClient:
         if self.api_token:
             self.headers['Authorization'] = f'Bearer {self.api_token}'
     
-    def create_session(self, client_id: Optional[str] = None, data_source: str = 'alpha_vantage') -> Dict[str, Any]:
+    def create_session(self, client_id: Optional[str] = None, data_source: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a new session for COT execution.
         
         Args:
-            client_id: Optional unique client identifier
-            data_source: Data source ('alpha_vantage' or 'edgar')
+            client_id: Unique client identifier (required by API, auto-generated if not provided)
+            data_source: Optional data source ('alpha_vantage' or 'edgar')
             
         Returns:
             Session object with 'id' field
         """
         url = f"{self.base_url}/api/v1/sessions/"
+        
+        # client_id is required by the API
+        if not client_id:
+            import uuid
+            client_id = f"client-{uuid.uuid4().hex[:12]}"
+        
         payload = {
-            'data_source': data_source
+            'client_id': client_id
         }
-        if client_id:
-            payload['client_id'] = client_id
+        
+        # data_source is optional
+        if data_source:
+            payload['data_source'] = data_source
         
         response = requests.post(url, json=payload, headers=self.headers, timeout=30)
         response.raise_for_status()
         return response.json()
+    
+    def upload_document(
+        self, 
+        session_id: str, 
+        file_path: Optional[str] = None,
+        file_content: Optional[bytes] = None,
+        file_name: Optional[str] = None,
+        consomme_id: Optional[str] = None,
+        custom_properties: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Upload a document to Consomme and attach it to a FinChat session.
+        
+        Args:
+            session_id: Session UID to attach document to
+            file_path: Path to PDF file to upload (mutually exclusive with file_content)
+            file_content: File content as bytes (mutually exclusive with file_path)
+            file_name: Name of the file (required if using file_content)
+            consomme_id: Existing Consomme document ID (if not uploading new file)
+            custom_properties: Optional dict with 'title' and/or 'file_url'
+            
+        Returns:
+            Document object with 'id', 'title', 'file_url', 'consomme_id'
+        """
+        url = f"{self.base_url}/api/v1/documents/"
+        
+        # Prepare form data
+        data = {
+            'session': session_id
+        }
+        
+        files = None
+        
+        if file_path:
+            # Upload from file path
+            with open(file_path, 'rb') as f:
+                files = {
+                    'files': (os.path.basename(file_path), f, 'application/pdf')
+                }
+                if custom_properties:
+                    data['custom_properties'] = json.dumps([custom_properties])
+                
+                # Use different headers for multipart/form-data
+                headers = {}
+                if self.api_token:
+                    headers['Authorization'] = f'Bearer {self.api_token}'
+                
+                response = requests.post(url, files=files, data=data, headers=headers, timeout=60)
+        elif file_content and file_name:
+            # Upload from file content
+            files = {
+                'files': (file_name, file_content, 'application/pdf')
+            }
+            if custom_properties:
+                data['custom_properties'] = json.dumps([custom_properties])
+            
+            headers = {}
+            if self.api_token:
+                headers['Authorization'] = f'Bearer {self.api_token}'
+            
+            response = requests.post(url, files=files, data=data, headers=headers, timeout=60)
+        elif consomme_id:
+            # Use existing Consomme ID
+            data['consomme_ids'] = [consomme_id]
+            if custom_properties:
+                data['custom_properties'] = [custom_properties]
+            
+            response = requests.post(url, json=data, headers=self.headers, timeout=60)
+        else:
+            raise ValueError("Either file_path, (file_content and file_name), or consomme_id must be provided")
+        
+        response.raise_for_status()
+        result = response.json()
+        # API returns a list, return first document
+        if isinstance(result, list) and len(result) > 0:
+            return result[0]
+        return result
     
     def run_cot(self, session_id: str, cot_slug: str, parameters: Dict[str, str]) -> Dict[str, Any]:
         """
@@ -390,8 +476,7 @@ class FinChatCOTClient:
         
         # Then add the main text parameter
         # ai-detector COT expects 'text', humanize-text COT expects 'paragraph'
-        # Wrap text in triple quotes to clearly mark boundaries and handle embedded quotes
-        payload[parameter_name] = f'"""{text}"""'
+        payload[parameter_name] = text
         
         if progress_callback:
             progress_callback(5, 'Starting COT execution...')

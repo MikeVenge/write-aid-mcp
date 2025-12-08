@@ -45,6 +45,9 @@ COT_V2_SESSION_ID = os.getenv('COT_V2_SESSION_ID', '6923bb68658abf729a7b8994')  
 FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
 FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
 
+# PDF file for GO button patterns
+PATTERNS_PDF_PATH = os.getenv('PATTERNS_PDF_PATH', 'COMPREHENSIVE LIST OF SIGNS OF AI WRITING.pdf')
+
 
 def sanitize_text(text: str) -> str:
     """
@@ -108,8 +111,8 @@ def progress_callback(job_id: str):
     return callback
 
 
-def process_cot_analysis(job_id: str, text: str, purpose: str):
-    """Process COT analysis in background thread (GO button - now using v2 API)."""
+def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Optional[bytes] = None, file_name: Optional[str] = None):
+    """Process COT analysis in background thread (GO button - using ai-detector-v2 COT directly)."""
     try:
         # Sanitize text to remove problematic special tokens (safety measure)
         text = sanitize_text(text)
@@ -125,21 +128,111 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
             return
         
         jobs[job_id]['progress'] = 10
-        jobs[job_id]['status_message'] = 'Starting analysis...'
+        jobs[job_id]['status_message'] = 'Creating session...'
         
-        # Run COT v2 with progress callback (using v2 API like GO2)
-        # Uses session ID for ai-detector COT which expects 'text' parameter
+        # Step 1: Create a new session
+        session_response = client.create_session()
+        session_id = session_response.get('id')
+        if not session_id:
+            raise RuntimeError(f"No session ID returned. Response: {session_response}")
+        
+        jobs[job_id]['progress'] = 20
+        jobs[job_id]['status_message'] = 'Uploading patterns document...'
+        
+        # Step 2: Upload patterns PDF file to Consomme
+        # Always upload the COMPREHENSIVE LIST OF SIGNS OF AI WRITING.pdf file
+        consomme_id = None
+        try:
+            # Get the absolute path to the PDF file
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            pdf_path = os.path.join(script_dir, PATTERNS_PDF_PATH)
+            
+            if not os.path.exists(pdf_path):
+                print(f"Warning: Patterns PDF file not found at {pdf_path}")
+            else:
+                # Upload the PDF file using file_path
+                document_response = client.upload_document(
+                    session_id=session_id,
+                    file_path=pdf_path
+                )
+                consomme_id = document_response.get('consomme_id')
+                if not consomme_id:
+                    print(f"Warning: No consomme_id returned from document upload. Response: {document_response}")
+                else:
+                    print(f"Successfully uploaded patterns PDF, consomme_id: {consomme_id}")
+        except Exception as e:
+            print(f"Warning: Failed to upload patterns PDF: {e}")
+            traceback.print_exc()
+            # Continue without file if upload fails, but log the error
+            consomme_id = None
+        
+        # Also handle user-provided file if any (for future extensibility)
+        if file_content and file_name:
+            try:
+                print(f"Also uploading user-provided file: {file_name}")
+                user_doc_response = client.upload_document(
+                    session_id=session_id,
+                    file_content=file_content,
+                    file_name=file_name
+                )
+                # Note: We only use the patterns PDF consomme_id for the $patterns parameter
+                # User files are attached to the session but not passed as patterns
+            except Exception as e:
+                print(f"Warning: Failed to upload user-provided file: {e}")
+        
+        jobs[job_id]['progress'] = 30
+        jobs[job_id]['status_message'] = 'Starting COT analysis...'
+        
+        # Step 3: Call COT with ai-detector-v2 slug
+        cot_slug = 'ai-detector-v2'
+        parameters = {
+            'purpose': 'general',
+            'text': text
+        }
+        
+        # Add patterns parameter if we have a consomme_id
+        if consomme_id:
+            parameters['patterns'] = consomme_id
+        
         callback = progress_callback(job_id)
-        result = client.run_cot_v2(
-            session_id=COT_SESSION_ID,
-            text=text,
-            parameter_name='text',  # ai-detector COT expects 'text' parameter
-            additional_params={'purpose': 'general'},  # ai-detector also expects 'purpose' parameter
-            progress_callback=callback
+        cot_chat = client.run_cot(session_id=session_id, cot_slug=cot_slug, parameters=parameters)
+        cot_chat_id = cot_chat.get('id')
+        
+        if not cot_chat_id:
+            raise RuntimeError(f"No chat ID returned from COT execution. Response: {cot_chat}")
+        
+        jobs[job_id]['progress'] = 40
+        jobs[job_id]['status_message'] = 'Waiting for analysis to complete...'
+        
+        # Step 4: Poll for completion with progress mapping (40% to 90%)
+        def mapped_callback(poll_progress: int, status: str):
+            # Map polling progress (0-100) to overall progress (40-90)
+            mapped_progress = 40 + int(poll_progress * 0.5)
+            callback(mapped_progress, status)
+        
+        result_data = client.poll_for_completion(
+            session_id=session_id,
+            cot_chat_id=cot_chat_id,
+            max_attempts=200,
+            interval_seconds=5,
+            progress_callback=mapped_callback
         )
         
-        # Extract result content (v2 returns content directly)
+        result_id = result_data.get('result_id')
+        if not result_id:
+            raise RuntimeError(f"No result_id returned from polling. Response: {result_data}")
+        
+        jobs[job_id]['progress'] = 90
+        jobs[job_id]['status_message'] = 'Retrieving results...'
+        
+        # Step 5: Get result content
+        result = client.get_result(result_id)
         content = result.get('content', '')
+        
+        if not content:
+            # Try to get content from metadata if available
+            metadata = result_data.get('metadata', {})
+            content = metadata.get('content', '') or str(result)
         
         jobs[job_id]['status'] = 'completed'
         jobs[job_id]['progress'] = 100
@@ -233,14 +326,18 @@ def config():
 @app.route('/api/mcp/analyze', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def mcp_analyze():
-    """Start COT analysis job (kept endpoint name for backward compatibility)."""
+    """Start COT analysis job using ai-detector-v2 COT with file upload support."""
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-        
-        text = data.get('text') or data.get('paragraph') or data.get('sentence', '')
-        purpose = data.get('purpose', 'AI detection for content analysis')
+        # Handle both JSON and multipart/form-data
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            text = request.form.get('text') or request.form.get('paragraph') or request.form.get('sentence', '')
+            purpose = request.form.get('purpose', 'AI detection for content analysis')
+            file = request.files.get('file')  # Single file upload
+        else:
+            data = request.get_json() or {}
+            text = data.get('text') or data.get('paragraph') or data.get('sentence', '')
+            purpose = data.get('purpose', 'AI detection for content analysis')
+            file = None
         
         if not text:
             return jsonify({'error': 'No text provided'}), 400
@@ -254,6 +351,13 @@ def mcp_analyze():
                 'error': 'COT API not configured. Set FINCHAT_BASE_URL environment variable.'
             }), 500
         
+        # Store file content if provided
+        file_content = None
+        file_name = None
+        if file:
+            file_content = file.read()
+            file_name = file.filename
+        
         # Create job
         job_id = str(uuid.uuid4())
         jobs[job_id] = {
@@ -262,13 +366,14 @@ def mcp_analyze():
             'status_message': 'Queued',
             'created_at': datetime.utcnow().isoformat(),
             'text': text[:100] + '...' if len(text) > 100 else text,  # Store preview
-            'purpose': purpose
+            'purpose': purpose,
+            'has_file': file is not None
         }
         
         # Start background processing
         thread = threading.Thread(
             target=process_cot_analysis,
-            args=(job_id, text, purpose),
+            args=(job_id, text, purpose, file_content, file_name),
             daemon=True
         )
         thread.start()

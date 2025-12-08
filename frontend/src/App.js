@@ -427,8 +427,7 @@ function App() {
       output += '# TEXT HUMANIZATION\n';
       output += '*(Powered by FinChat v2 API)*\n\n';
     } else {
-      output += '# AI DETECTION ANALYSIS\n';
-      output += '*(Powered by FinChat MCP)*\n\n';
+      output += '# AI DETECTION ANALYSIS\n\n';
     }
     output += '---\n\n';
     output += result;
