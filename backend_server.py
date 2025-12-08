@@ -6,6 +6,7 @@ Handles COT analysis requests with job-based async processing.
 
 import os
 import uuid
+import re
 import threading
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -45,6 +46,44 @@ FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
 FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
 
 
+def sanitize_text(text: str) -> str:
+    """
+    Sanitize text by removing or replacing special tokens that cause issues with tiktoken encoding.
+    FinChat's tiktoken encoder throws errors when encountering certain special tokens like <|endoftext|>.
+    
+    Args:
+        text: Input text that may contain problematic special tokens
+        
+    Returns:
+        Sanitized text with special tokens removed or replaced
+    """
+    if not text:
+        return text
+    
+    # List of special tokens that cause issues with tiktoken
+    # These are common GPT/LLM special tokens that should be removed or replaced
+    problematic_tokens = [
+        '<|endoftext|>',
+        '<|end_of_text|>',
+        '<|fim_prefix|>',
+        '<|fim_middle|>',
+        '<|fim_suffix|>',
+        '<|fim_pad|>',
+        '<|startoftext|>',
+        '<|start_of_text|>',
+    ]
+    
+    sanitized = text
+    for token in problematic_tokens:
+        # Replace with empty string (remove) or replace with a space if you want to preserve spacing
+        sanitized = sanitized.replace(token, ' ')
+    
+    # Clean up multiple spaces that might result from replacements
+    sanitized = re.sub(r'\s+', ' ', sanitized)
+    
+    return sanitized.strip()
+
+
 def get_cot_client() -> Optional[FinChatCOTClient]:
     """Get COT client instance."""
     if not FINCHAT_BASE_URL:
@@ -72,6 +111,9 @@ def progress_callback(job_id: str):
 def process_cot_analysis(job_id: str, text: str, purpose: str):
     """Process COT analysis in background thread (GO button - now using v2 API)."""
     try:
+        # Sanitize text to remove problematic special tokens (safety measure)
+        text = sanitize_text(text)
+        
         jobs[job_id]['status'] = 'processing'
         jobs[job_id]['progress'] = 5
         jobs[job_id]['status_message'] = 'Initializing...'
@@ -117,6 +159,9 @@ def process_cot_analysis(job_id: str, text: str, purpose: str):
 def process_cot_v2_analysis(job_id: str, text: str, purpose: str):
     """Process COT v2 analysis in background thread (for GO2 button)."""
     try:
+        # Sanitize text to remove problematic special tokens (safety measure)
+        text = sanitize_text(text)
+        
         jobs[job_id]['status'] = 'processing'
         jobs[job_id]['progress'] = 5
         jobs[job_id]['status_message'] = 'Initializing v2...'
@@ -200,6 +245,9 @@ def mcp_analyze():
         if not text:
             return jsonify({'error': 'No text provided'}), 400
         
+        # Sanitize text to remove problematic special tokens (e.g., <|endoftext|>)
+        text = sanitize_text(text)
+        
         # Check if COT API is configured
         if not FINCHAT_BASE_URL:
             return jsonify({
@@ -278,6 +326,9 @@ def mcp_analyze_v2():
         
         if not text:
             return jsonify({'error': 'No text provided'}), 400
+        
+        # Sanitize text to remove problematic special tokens (e.g., <|endoftext|>)
+        text = sanitize_text(text)
         
         # Check if COT API is configured
         if not FINCHAT_BASE_URL:
