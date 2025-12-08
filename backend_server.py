@@ -184,15 +184,18 @@ def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Opt
         jobs[job_id]['status_message'] = 'Starting COT analysis...'
         
         # Step 3: Call COT with ai-detector-v2 slug
+        # Parameter order: $purpose (first), $patterns (second), $text (third)
         cot_slug = 'ai-detector-v2'
         parameters = {
-            'purpose': 'general',
-            'text': text
+            'purpose': 'general'
         }
         
-        # Add patterns parameter if we have a consomme_id
+        # Add patterns parameter second if we have a consomme_id
         if consomme_id:
             parameters['patterns'] = consomme_id
+        
+        # Add text parameter third
+        parameters['text'] = text
         
         callback = progress_callback(job_id)
         cot_chat = client.run_cot(session_id=session_id, cot_slug=cot_slug, parameters=parameters)
