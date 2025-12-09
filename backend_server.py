@@ -53,6 +53,7 @@ def sanitize_text(text: str) -> str:
     """
     Sanitize text by removing or replacing special tokens that cause issues with tiktoken encoding.
     FinChat's tiktoken encoder throws errors when encountering certain special tokens like <|endoftext|>.
+    Also replaces '$' signs with 'USD' to avoid conflicts with COT parameter syntax.
     
     Args:
         text: Input text that may contain problematic special tokens
@@ -62,6 +63,11 @@ def sanitize_text(text: str) -> str:
     """
     if not text:
         return text
+    
+    sanitized = text
+    
+    # Replace '$' signs with 'USD' to avoid conflicts with COT parameter syntax ($param:value)
+    sanitized = sanitized.replace('$', 'USD')
     
     # List of special tokens that cause issues with tiktoken
     # These are common GPT/LLM special tokens that should be removed or replaced
@@ -76,7 +82,6 @@ def sanitize_text(text: str) -> str:
         '<|start_of_text|>',
     ]
     
-    sanitized = text
     for token in problematic_tokens:
         # Replace with empty string (remove) or replace with a space if you want to preserve spacing
         sanitized = sanitized.replace(token, ' ')
