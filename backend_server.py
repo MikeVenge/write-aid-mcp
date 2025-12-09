@@ -45,8 +45,9 @@ COT_V2_SESSION_ID = os.getenv('COT_V2_SESSION_ID', '6923bb68658abf729a7b8994')  
 FINCHAT_BASE_URL = os.getenv('FINCHAT_BASE_URL', '')
 FINCHAT_API_TOKEN = os.getenv('FINCHAT_API_TOKEN', '')  # Optional
 
-# PDF file for GO button patterns
+# PDF files for GO button patterns
 PATTERNS_PDF_PATH = os.getenv('PATTERNS_PDF_PATH', 'COMPREHENSIVE LIST OF SIGNS OF AI WRITING.pdf')
+PATTERNS_PDF_PATH_2 = os.getenv('PATTERNS_PDF_PATH_2', 'Human_vs_AI_Writing_Analysis_Report (rag) (1).pdf')
 
 
 def sanitize_text(text: str) -> str:
@@ -142,34 +143,52 @@ def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Opt
             raise RuntimeError(f"No session ID returned. Response: {session_response}")
         
         jobs[job_id]['progress'] = 20
-        jobs[job_id]['status_message'] = 'Uploading patterns document...'
+        jobs[job_id]['status_message'] = 'Uploading patterns documents...'
         
-        # Step 2: Upload patterns PDF file to Consomme
-        # Always upload the COMPREHENSIVE LIST OF SIGNS OF AI WRITING.pdf file
-        consomme_id = None
+        # Step 2: Upload both patterns PDF files to Consomme
+        # Upload COMPREHENSIVE LIST OF SIGNS OF AI WRITING.pdf and Human_vs_AI_Writing_Analysis_Report (rag) (1).pdf
+        consomme_ids = []
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Upload first PDF file
         try:
-            # Get the absolute path to the PDF file
-            script_dir = os.path.dirname(os.path.abspath(__file__))
             pdf_path = os.path.join(script_dir, PATTERNS_PDF_PATH)
-            
             if not os.path.exists(pdf_path):
                 print(f"Warning: Patterns PDF file not found at {pdf_path}")
             else:
-                # Upload the PDF file using file_path
                 document_response = client.upload_document(
                     session_id=session_id,
                     file_path=pdf_path
                 )
                 consomme_id = document_response.get('consomme_id')
-                if not consomme_id:
-                    print(f"Warning: No consomme_id returned from document upload. Response: {document_response}")
+                if consomme_id:
+                    consomme_ids.append(consomme_id)
+                    print(f"Successfully uploaded patterns PDF 1, consomme_id: {consomme_id}")
                 else:
-                    print(f"Successfully uploaded patterns PDF, consomme_id: {consomme_id}")
+                    print(f"Warning: No consomme_id returned from document upload. Response: {document_response}")
         except Exception as e:
-            print(f"Warning: Failed to upload patterns PDF: {e}")
+            print(f"Warning: Failed to upload patterns PDF 1: {e}")
             traceback.print_exc()
-            # Continue without file if upload fails, but log the error
-            consomme_id = None
+        
+        # Upload second PDF file
+        try:
+            pdf_path_2 = os.path.join(script_dir, PATTERNS_PDF_PATH_2)
+            if not os.path.exists(pdf_path_2):
+                print(f"Warning: Patterns PDF file 2 not found at {pdf_path_2}")
+            else:
+                document_response_2 = client.upload_document(
+                    session_id=session_id,
+                    file_path=pdf_path_2
+                )
+                consomme_id_2 = document_response_2.get('consomme_id')
+                if consomme_id_2:
+                    consomme_ids.append(consomme_id_2)
+                    print(f"Successfully uploaded patterns PDF 2, consomme_id: {consomme_id_2}")
+                else:
+                    print(f"Warning: No consomme_id returned from document upload 2. Response: {document_response_2}")
+        except Exception as e:
+            print(f"Warning: Failed to upload patterns PDF 2: {e}")
+            traceback.print_exc()
         
         # Also handle user-provided file if any (for future extensibility)
         if file_content and file_name:
@@ -195,9 +214,11 @@ def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Opt
             'purpose': 'general'
         }
         
-        # Add patterns parameter second if we have a consomme_id
-        if consomme_id:
-            parameters['patterns'] = consomme_id
+        # Add patterns parameter second if we have consomme_ids
+        # Combine multiple consomme_ids with comma separation
+        if consomme_ids:
+            parameters['patterns'] = ','.join(consomme_ids)
+            print(f"Using patterns with {len(consomme_ids)} document(s): {parameters['patterns']}")
         
         # Add text parameter third
         parameters['text'] = text
@@ -310,13 +331,17 @@ def health():
     """Health check endpoint."""
     cot_configured = bool(FINCHAT_BASE_URL)
     
-    # Check if PDF file exists (for version verification)
+    # Check if PDF files exist (for version verification)
     pdf_exists = False
+    pdf_exists_2 = False
     pdf_path = None
+    pdf_path_2 = None
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         pdf_path = os.path.join(script_dir, PATTERNS_PDF_PATH)
+        pdf_path_2 = os.path.join(script_dir, PATTERNS_PDF_PATH_2)
         pdf_exists = os.path.exists(pdf_path)
+        pdf_exists_2 = os.path.exists(pdf_path_2)
     except Exception:
         pass
     
@@ -325,7 +350,9 @@ def health():
         'cot_configured': cot_configured,
         'cot_session_id': COT_SESSION_ID if cot_configured else None,
         'pdf_file_exists': pdf_exists,
+        'pdf_file_2_exists': pdf_exists_2,
         'pdf_path': pdf_path if pdf_exists else None,
+        'pdf_path_2': pdf_path_2 if pdf_exists_2 else None,
         'timestamp': datetime.utcnow().isoformat()
     })
 
