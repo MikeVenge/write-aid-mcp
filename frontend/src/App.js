@@ -20,6 +20,7 @@ function App() {
   const lastAnalyzedTextRef = useRef('');
   const analysisAbortRef = useRef(false);
   const currentAnalysisPromiseRef = useRef(null);
+  const resetFlagRef = useRef(false); // Track if reset was clicked
 
   // Initialize FinChat client
   useEffect(() => {
@@ -177,6 +178,9 @@ function App() {
   };
 
   const handleReset = () => {
+    // Set reset flag to prevent any further status updates
+    resetFlagRef.current = true;
+    
     // Abort any ongoing analysis
     analysisAbortRef.current = true;
     currentAnalysisPromiseRef.current = null;
@@ -188,7 +192,7 @@ function App() {
     }
     analysisStartTimeRef.current = null;
     
-    // Reset all state
+    // Reset all state immediately
     setInputText('');
     setOutputText('');
     setIsProcessing(false);
@@ -203,6 +207,7 @@ function App() {
     // Reset abort flag after a brief delay to ensure cleanup
     setTimeout(() => {
       analysisAbortRef.current = false;
+      resetFlagRef.current = false;
     }, 100);
   };
 
@@ -256,8 +261,9 @@ function App() {
     // Update the last analyzed text reference
     lastAnalyzedTextRef.current = paragraph;
     
-      // Reset abort flag BEFORE starting new analysis
+      // Reset abort flag and reset flag BEFORE starting new analysis
       analysisAbortRef.current = false;
+      resetFlagRef.current = false;
       setOutputText(''); // Clear output when starting new analysis
       setProgressStatus('Initializing...');
       setProgressPercent(0);
@@ -283,11 +289,15 @@ function App() {
       // Pass abort check function so polling can be cancelled
       const analysisPromise = client.analyzeMCP('', paragraph, 'AI detection analysis', {
         callback: (progress, status, statusMessage) => {
+          // Ignore progress updates if reset was clicked
+          if (resetFlagRef.current || analysisAbortRef.current) {
+            return;
+          }
           // Progress callback for polling updates
           setProgressPercent(progress || 0);
           setProgressStatus(statusMessage || status || 'Processing...');
         },
-        shouldAbort: () => analysisAbortRef.current
+        shouldAbort: () => analysisAbortRef.current || resetFlagRef.current
       });
       
       // Store the promise reference so we can track it
@@ -375,8 +385,9 @@ function App() {
     // Update the last analyzed text reference
     lastAnalyzedTextRef.current = paragraph;
     
-    // Reset abort flag BEFORE starting new analysis
+    // Reset abort flag and reset flag BEFORE starting new analysis
     analysisAbortRef.current = false;
+    resetFlagRef.current = false;
     setOutputText('');
     setProgressStatus('Initializing GO2...');
     setProgressPercent(0);
@@ -399,10 +410,14 @@ function App() {
       // Use GO2 (v2) mode with polling
       const analysisPromise = client.analyzeMCPv2('', paragraph, 'Text humanization', {
         callback: (progress, status, statusMessage) => {
+          // Ignore progress updates if reset was clicked
+          if (resetFlagRef.current || analysisAbortRef.current) {
+            return;
+          }
           setProgressPercent(progress || 0);
           setProgressStatus(statusMessage || status || 'Processing...');
         },
-        shouldAbort: () => analysisAbortRef.current
+        shouldAbort: () => analysisAbortRef.current || resetFlagRef.current
       });
       
       currentAnalysisPromiseRef.current = analysisPromise;
