@@ -545,6 +545,7 @@ function App() {
           <span className="title-write-aid">Write Aid</span>{' '}
           <span className="title-ai-checker">AI Checker</span>
         </h1>
+        <p className="title-subtext">Built with AlphaX Agent Builder</p>
         {isProcessing && (
           <div className="timer-display">
             <span className="timer-label">Analysis Time:</span>
