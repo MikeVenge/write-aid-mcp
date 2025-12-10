@@ -540,7 +540,6 @@ function App() {
               <button 
                 className="icon-button" 
                 onClick={handleReset}
-                disabled={isProcessing}
                 title="Reset input and output to start a new analysis"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -550,16 +549,16 @@ function App() {
               <button 
                 className="go-button" 
                 onClick={handleAnalyze}
-                disabled={!inputText.trim()}
-                title={isProcessing ? "Restart analysis with current text" : "Start AI detection analysis"}
+                disabled={!inputText.trim() || isProcessing}
+                title={isProcessing ? "Analysis in progress..." : "Start AI detection analysis"}
               >
                 Detect
               </button>
               <button 
                 className="go-button go2-button" 
                 onClick={handleAnalyzeGO2}
-                disabled={!inputText.trim()}
-                title={isProcessing ? "Restart humanization with current text" : "Start text humanization"}
+                disabled={!inputText.trim() || isProcessing}
+                title={isProcessing ? "Analysis in progress..." : "Start text humanization"}
               >
                 Humanize
               </button>
