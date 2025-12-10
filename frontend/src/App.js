@@ -177,12 +177,33 @@ function App() {
   };
 
   const handleReset = () => {
+    // Abort any ongoing analysis
+    analysisAbortRef.current = true;
+    currentAnalysisPromiseRef.current = null;
+    
+    // Clear timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    analysisStartTimeRef.current = null;
+    
+    // Reset all state
     setInputText('');
     setOutputText('');
+    setIsProcessing(false);
+    setElapsedTime(0);
     setProgressStatus('');
     setProgressPercent(0);
     setShowWarning(false);
     setShowSameTextWarning(false);
+    setAnalysisType('GO');
+    lastAnalyzedTextRef.current = '';
+    
+    // Reset abort flag after a brief delay to ensure cleanup
+    setTimeout(() => {
+      analysisAbortRef.current = false;
+    }, 100);
   };
 
   const handleAnalyze = useCallback(async () => {
