@@ -183,9 +183,55 @@ export class FinChatClient {
   async pollForResult(jobId, onProgress = null, shouldAbort = null) {
     const pollInterval = 5000; // Poll every 5 seconds
     const maxAttempts = 200; // 200 * 5s = 1000s = ~16 minutes
+    const requestTimeout = 10000; // 10 second timeout for each request
+    const maxConsecutiveFailures = 5; // Max consecutive failures before retrying more aggressively
     let attempts = 0;
+    let consecutiveFailures = 0;
+    let lastSuccessfulStatus = null;
+    let lastStatusTime = Date.now();
 
     console.log(`Starting to poll for job ${jobId}`);
+
+    // Helper function to make a request with timeout and retry
+    const fetchWithRetry = async (url, retries = 3) => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+          
+          const response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+          }
+          
+          return await response.json();
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            console.warn(`Request timeout (attempt ${i + 1}/${retries})`);
+          } else {
+            console.warn(`Request failed (attempt ${i + 1}/${retries}):`, error.message);
+          }
+          
+          // If this is the last retry, throw the error
+          if (i === retries - 1) {
+            throw error;
+          }
+          
+          // Wait before retry with exponential backoff
+          await new Promise(resolve => setTimeout(resolve, Math.min(1000 * Math.pow(2, i), 5000)));
+        }
+      }
+    };
 
     while (attempts < maxAttempts) {
       // Check if we should abort before waiting
@@ -194,12 +240,16 @@ export class FinChatClient {
         throw new Error('Analysis cancelled - restart requested');
       }
 
+      // Adjust poll interval based on consecutive failures
+      // If we've had failures, poll more frequently to recover faster
+      const currentPollInterval = consecutiveFailures > 0 
+        ? Math.max(2000, pollInterval - (consecutiveFailures * 500)) // Faster polling after failures
+        : pollInterval;
+
       // Wait before polling (except for first attempt)
-      // Use smaller intervals to check abort more frequently
       if (attempts > 0) {
-        // Break wait into smaller chunks to check abort more frequently
-        const chunkSize = 500; // Check every 500ms instead of waiting full 5 seconds
-        const chunks = Math.ceil(pollInterval / chunkSize);
+        const chunkSize = 500; // Check every 500ms
+        const chunks = Math.ceil(currentPollInterval / chunkSize);
         for (let i = 0; i < chunks; i++) {
           await new Promise(resolve => setTimeout(resolve, chunkSize));
           // Check abort during wait
@@ -219,24 +269,21 @@ export class FinChatClient {
       attempts++;
 
       try {
-        console.log(`Poll attempt ${attempts}/${maxAttempts} for job ${jobId}`);
-        const response = await fetch(`${this.backendUrl}/api/mcp/status/${jobId}`);
+        console.log(`Poll attempt ${attempts}/${maxAttempts} for job ${jobId}${consecutiveFailures > 0 ? ` (recovering from ${consecutiveFailures} failures)` : ''}`);
         
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => response.statusText);
-          console.error(`Status check failed (HTTP ${response.status}):`, errorText);
-          throw new Error(`Status check failed: ${response.statusText}`);
-        }
+        const status = await fetchWithRetry(`${this.backendUrl}/api/mcp/status/${jobId}`);
+        
+        // Reset consecutive failures on successful request
+        consecutiveFailures = 0;
+        lastSuccessfulStatus = status;
+        lastStatusTime = Date.now();
 
-        const status = await response.json();
         console.log(`Job ${jobId} status response:`, JSON.stringify(status, null, 2));
         console.log(`Job ${jobId} status:`, status.status, status.progress !== undefined ? `(${status.progress}%)` : '');
 
         // Check for completion FIRST before checking abort
-        // This ensures we don't miss completed results
         if (status.status === 'completed' || status.status === 'done' || status.status === 'success') {
           console.log(`Job ${jobId} completed! Result length:`, status.result ? status.result.length : 0);
-          // Check abort after detecting completion - if aborted, don't return result
           if (shouldAbort && shouldAbort()) {
             console.log(`Polling aborted for job ${jobId} but result was completed`);
             throw new Error('Analysis cancelled - restart requested');
@@ -261,22 +308,44 @@ export class FinChatClient {
         }
 
         // Status is 'processing', continue polling
-        console.log(`Job ${jobId} still processing, will check again in ${pollInterval/1000}s...`);
+        console.log(`Job ${jobId} still processing, will check again in ${currentPollInterval/1000}s...`);
         
       } catch (error) {
         // If aborted, re-throw immediately
         if (error.message.includes('Analysis cancelled') || error.message.includes('restart requested')) {
           throw error;
         }
-        // Only log non-critical errors (network issues, etc.)
-        // Don't log if it's a failed status (that's handled above)
-        if (!error.message.includes('Analysis failed')) {
-          console.warn(`Poll attempt ${attempts} failed:`, error.message);
-        } else {
-          // Re-throw failed status errors
+        
+        // Don't throw on failed status (that's handled above)
+        if (error.message.includes('Analysis failed')) {
           throw error;
         }
-        // Continue polling for network/parsing errors
+        
+        // Track consecutive failures
+        consecutiveFailures++;
+        console.warn(`Poll attempt ${attempts} failed (${consecutiveFailures} consecutive):`, error.message);
+        
+        // If we've had too many consecutive failures, throw an error
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          console.error(`Too many consecutive failures (${consecutiveFailures}), giving up`);
+          throw new Error(`Failed to get status updates after ${consecutiveFailures} attempts: ${error.message}`);
+        }
+        
+        // If we have a last successful status and it's been a while, check if we should continue
+        if (lastSuccessfulStatus && Date.now() - lastStatusTime > 60000) {
+          // It's been more than a minute since last successful status
+          // Check if the last status was still processing
+          if (lastSuccessfulStatus.status === 'processing') {
+            console.warn(`No status updates for ${Math.floor((Date.now() - lastStatusTime) / 1000)}s, but continuing...`);
+          }
+        }
+        
+        // Continue polling with shorter interval after failures
+        // Don't wait the full interval if we had a failure
+        if (consecutiveFailures > 0) {
+          // Already waited, but reduce next wait time
+          continue;
+        }
       }
     }
 
