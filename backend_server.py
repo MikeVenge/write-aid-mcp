@@ -143,85 +143,15 @@ def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Opt
             raise RuntimeError(f"No session ID returned. Response: {session_response}")
         
         jobs[job_id]['progress'] = 20
-        jobs[job_id]['status_message'] = 'Uploading patterns documents...'
-        
-        # Step 2: Upload both patterns PDF files to Consomme
-        # Upload COMPREHENSIVE LIST OF SIGNS OF AI WRITING.pdf and Human_vs_AI_Writing_Analysis_Report (rag) (1).pdf
-        consomme_ids = []
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Upload first PDF file
-        try:
-            pdf_path = os.path.join(script_dir, PATTERNS_PDF_PATH)
-            if not os.path.exists(pdf_path):
-                print(f"Warning: Patterns PDF file not found at {pdf_path}")
-            else:
-                document_response = client.upload_document(
-                    session_id=session_id,
-                    file_path=pdf_path
-                )
-                consomme_id = document_response.get('consomme_id')
-                if consomme_id:
-                    consomme_ids.append(consomme_id)
-                    print(f"Successfully uploaded patterns PDF 1, consomme_id: {consomme_id}")
-                else:
-                    print(f"Warning: No consomme_id returned from document upload. Response: {document_response}")
-        except Exception as e:
-            print(f"Warning: Failed to upload patterns PDF 1: {e}")
-            traceback.print_exc()
-        
-        # Upload second PDF file
-        try:
-            pdf_path_2 = os.path.join(script_dir, PATTERNS_PDF_PATH_2)
-            if not os.path.exists(pdf_path_2):
-                print(f"Warning: Patterns PDF file 2 not found at {pdf_path_2}")
-            else:
-                document_response_2 = client.upload_document(
-                    session_id=session_id,
-                    file_path=pdf_path_2
-                )
-                consomme_id_2 = document_response_2.get('consomme_id')
-                if consomme_id_2:
-                    consomme_ids.append(consomme_id_2)
-                    print(f"Successfully uploaded patterns PDF 2, consomme_id: {consomme_id_2}")
-                else:
-                    print(f"Warning: No consomme_id returned from document upload 2. Response: {document_response_2}")
-        except Exception as e:
-            print(f"Warning: Failed to upload patterns PDF 2: {e}")
-            traceback.print_exc()
-        
-        # Also handle user-provided file if any (for future extensibility)
-        if file_content and file_name:
-            try:
-                print(f"Also uploading user-provided file: {file_name}")
-                user_doc_response = client.upload_document(
-                    session_id=session_id,
-                    file_content=file_content,
-                    file_name=file_name
-                )
-                # Note: We only use the patterns PDF consomme_id for the $patterns parameter
-                # User files are attached to the session but not passed as patterns
-            except Exception as e:
-                print(f"Warning: Failed to upload user-provided file: {e}")
-        
-        jobs[job_id]['progress'] = 30
         jobs[job_id]['status_message'] = 'Starting COT analysis...'
         
-        # Step 3: Call COT with ai-detector-v2 slug
-        # Parameter order: $purpose (first), $patterns (second), $text (third)
+        # Step 2: Call COT with ai-detector-v2 slug
+        # Parameters: $purpose (first), $text (second)
         cot_slug = 'ai-detector-v2'
         parameters = {
-            'purpose': 'general'
+            'purpose': 'general',
+            'text': text
         }
-        
-        # Add patterns parameter second if we have consomme_ids
-        # Combine multiple consomme_ids with comma separation
-        if consomme_ids:
-            parameters['patterns'] = ','.join(consomme_ids)
-            print(f"Using patterns with {len(consomme_ids)} document(s): {parameters['patterns']}")
-        
-        # Add text parameter third
-        parameters['text'] = text
         
         callback = progress_callback(job_id)
         cot_chat = client.run_cot(session_id=session_id, cot_slug=cot_slug, parameters=parameters)
