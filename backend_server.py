@@ -72,6 +72,7 @@ def sanitize_text(text: str) -> str:
     
     # List of special tokens that cause issues with tiktoken
     # These are common GPT/LLM special tokens that should be removed or replaced
+    # Using both exact matches and regex patterns to catch variations
     problematic_tokens = [
         '<|endoftext|>',
         '<|end_of_text|>',
@@ -83,9 +84,27 @@ def sanitize_text(text: str) -> str:
         '<|start_of_text|>',
     ]
     
+    # First, do exact replacements (case-sensitive)
     for token in problematic_tokens:
-        # Replace with empty string (remove) or replace with a space if you want to preserve spacing
         sanitized = sanitized.replace(token, ' ')
+    
+    # Also use regex to catch case variations and spacing variations
+    # Pattern: <|...|> where ... contains endoftext, end_of_text, fim_*, startoftext, etc.
+    token_patterns = [
+        r'<\|endoftext\|>',
+        r'<\|end_of_text\|>',
+        r'<\|end\s*of\s*text\|>',  # Handle spaces: <|end of text|>
+        r'<\|fim_prefix\|>',
+        r'<\|fim_middle\|>',
+        r'<\|fim_suffix\|>',
+        r'<\|fim_pad\|>',
+        r'<\|startoftext\|>',
+        r'<\|start_of_text\|>',
+        r'<\|start\s*of\s*text\|>',  # Handle spaces: <|start of text|>
+    ]
+    
+    for pattern in token_patterns:
+        sanitized = re.sub(pattern, ' ', sanitized, flags=re.IGNORECASE)
     
     # Clean up multiple spaces that might result from replacements
     sanitized = re.sub(r'\s+', ' ', sanitized)
