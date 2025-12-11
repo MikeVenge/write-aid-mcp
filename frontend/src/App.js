@@ -10,10 +10,12 @@ function App() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
+  // eslint-disable-next-line no-unused-vars
   const [isMCPConnected, setIsMCPConnected] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [showSameTextWarning, setShowSameTextWarning] = useState(false);
   const [client, setClient] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [analysisType, setAnalysisType] = useState('GO'); // 'GO' or 'GO2'
   const timerIntervalRef = useRef(null);
   const analysisStartTimeRef = useRef(null); // Store start timestamp instead of counting
@@ -545,7 +547,7 @@ function App() {
           <span className="title-write-aid">Write Aid</span>{' '}
           <span className="title-ai-checker">AI Checker</span>
         </h1>
-        <p className="title-subtext">Built with AlphaX Agent Builder</p>
+        <p className="title-subtext">Created with AlphaX Agent Builder</p>
         {isProcessing && (
           <div className="timer-display">
             <span className="timer-label">Analysis Time:</span>
@@ -603,7 +605,7 @@ function App() {
           </div>
           <div className="info-message">
             <span className="info-icon">ℹ️</span>
-            <span>Analysis takes approximately 9 minutes. Minimum 250 words required.</span>
+            <span>Analysis takes approximately 5 minutes. Minimum 250 words required.</span>
           </div>
           <div className="text-area-wrapper">
             <textarea
