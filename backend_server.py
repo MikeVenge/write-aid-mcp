@@ -176,7 +176,7 @@ def progress_callback(job_id: str):
 
 
 def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Optional[bytes] = None, file_name: Optional[str] = None):
-    """Process COT analysis in background thread (GO button - using ai-detector-v2 COT directly)."""
+    """Process COT analysis in background thread (GO button - using ai-detector-e1 COT directly)."""
     try:
         # Sanitize text to remove problematic special tokens (safety measure)
         text = sanitize_text(text)
@@ -203,9 +203,9 @@ def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Opt
         jobs[job_id]['progress'] = 20
         jobs[job_id]['status_message'] = 'Starting COT analysis...'
         
-        # Step 2: Call COT with ai-detector-v2 slug
+        # Step 2: Call COT with ai-detector-e1 slug
         # Parameters: $purpose (first), $text (second)
-        cot_slug = 'ai-detector-v2'
+        cot_slug = 'ai-detector-e1'
         parameters = {
             'purpose': 'general',
             'text': text
@@ -379,7 +379,7 @@ def config():
 @app.route('/api/mcp/analyze', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def mcp_analyze():
-    """Start COT analysis job using ai-detector-v2 COT with file upload support."""
+    """Start COT analysis job using ai-detector-e1 COT with file upload support."""
     try:
         # Handle both JSON and multipart/form-data
         if request.content_type and 'multipart/form-data' in request.content_type:
