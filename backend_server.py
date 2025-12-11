@@ -65,14 +65,13 @@ def sanitize_text(text: str) -> str:
     if not text:
         return text
     
-    sanitized = text
+    sanitized = str(text)  # Ensure it's a string
     
     # Replace '$' signs with 'USD' to avoid conflicts with COT parameter syntax ($param:value)
     sanitized = sanitized.replace('$', 'USD')
     
     # List of special tokens that cause issues with tiktoken
     # These are common GPT/LLM special tokens that should be removed or replaced
-    # Using both exact matches and regex patterns to catch variations
     problematic_tokens = [
         '<|endoftext|>',
         '<|end_of_text|>',
@@ -84,13 +83,18 @@ def sanitize_text(text: str) -> str:
         '<|start_of_text|>',
     ]
     
-    # First, do exact replacements (case-sensitive)
-    for token in problematic_tokens:
-        sanitized = sanitized.replace(token, ' ')
+    # First, do exact replacements (case-sensitive) - multiple passes to catch nested cases
+    for _ in range(3):  # Multiple passes to catch overlapping patterns
+        for token in problematic_tokens:
+            sanitized = sanitized.replace(token, ' ')
+            # Also try with different bracket styles
+            sanitized = sanitized.replace(token.replace('<', '&lt;').replace('>', '&gt;'), ' ')
+            sanitized = sanitized.replace(token.replace('<', '[').replace('>', ']'), ' ')
     
-    # Also use regex to catch case variations and spacing variations
-    # Pattern: <|...|> where ... contains endoftext, end_of_text, fim_*, startoftext, etc.
+    # Use comprehensive regex patterns to catch ALL variations
+    # Pattern: <|...|> or [|...|] or &lt;|...|&gt; where ... contains endoftext, etc.
     token_patterns = [
+        # Standard format with pipes
         r'<\|endoftext\|>',
         r'<\|end_of_text\|>',
         r'<\|end\s*of\s*text\|>',  # Handle spaces: <|end of text|>
@@ -101,13 +105,48 @@ def sanitize_text(text: str) -> str:
         r'<\|startoftext\|>',
         r'<\|start_of_text\|>',
         r'<\|start\s*of\s*text\|>',  # Handle spaces: <|start of text|>
+        # Square brackets
+        r'\[\|endoftext\|\]',
+        r'\[\|end_of_text\|\]',
+        r'\[\|end\s*of\s*text\|\]',
+        # HTML entities
+        r'&lt;\|endoftext\|&gt;',
+        r'&lt;\|end_of_text\|&gt;',
+        # Without pipes (just brackets)
+        r'<endoftext>',
+        r'<end_of_text>',
+        r'\[endoftext\]',
+        # Case variations (comprehensive)
+        r'<\|[Ee][Nn][Dd][Oo][Ff][Tt][Ee][Xx][Tt]\|>',
+        r'<\|[Ss][Tt][Aa][Rr][Tt][Oo][Ff][Tt][Ee][Xx][Tt]\|>',
     ]
     
     for pattern in token_patterns:
         sanitized = re.sub(pattern, ' ', sanitized, flags=re.IGNORECASE)
     
+    # Also catch any pattern that looks like <|...|> with common token names inside
+    # This is a catch-all for any variations we might have missed
+    catch_all_patterns = [
+        r'<\|[^|]*end[^|]*text[^|]*\|>',  # <|anything with "end" and "text"|>
+        r'<\|[^|]*start[^|]*text[^|]*\|>',  # <|anything with "start" and "text"|>
+        r'<\|[^|]*fim[^|]*\|>',  # <|anything with "fim"|>
+    ]
+    
+    for pattern in catch_all_patterns:
+        sanitized = re.sub(pattern, ' ', sanitized, flags=re.IGNORECASE)
+    
     # Clean up multiple spaces that might result from replacements
     sanitized = re.sub(r'\s+', ' ', sanitized)
+    
+    # Final check: if text still contains suspicious patterns, log a warning
+    if '<|' in sanitized or '|>' in sanitized:
+        # Check if it's a legitimate pattern (like <|user|> or <|assistant|>) or suspicious
+        suspicious_pattern = re.search(r'<\|[^|]*(?:end|start|fim)[^|]*\|>', sanitized, re.IGNORECASE)
+        if suspicious_pattern:
+            print(f"WARNING: Suspicious token pattern found after sanitization: {suspicious_pattern.group()}")
+            # Remove it aggressively
+            sanitized = re.sub(r'<\|[^|]*(?:end|start|fim)[^|]*\|>', ' ', sanitized, flags=re.IGNORECASE)
+            sanitized = re.sub(r'\s+', ' ', sanitized)
     
     return sanitized.strip()
 
@@ -230,8 +269,25 @@ def process_cot_analysis(job_id: str, text: str, purpose: str, file_content: Opt
 def process_cot_v2_analysis(job_id: str, text: str, purpose: str):
     """Process COT v2 analysis in background thread (for GO2 button)."""
     try:
+        # Log original text length for debugging
+        original_length = len(text) if text else 0
+        
         # Sanitize text to remove problematic special tokens (safety measure)
+        text_before = text
         text = sanitize_text(text)
+        text_after = text
+        
+        # Check if sanitization changed anything suspicious
+        if '<|endoftext|>' in text_before.lower() or '<|endoftext|>' in text_after.lower():
+            print(f"WARNING [GO2 Job {job_id}]: endoftext token detected!")
+            print(f"  Before sanitization length: {len(text_before)}")
+            print(f"  After sanitization length: {len(text_after)}")
+            print(f"  Contains '<|endoftext|>': {('<|endoftext|>' in text_after)}")
+            # Force remove any remaining instances
+            text = text.replace('<|endoftext|>', ' ').replace('<|ENDOFTEXT|>', ' ')
+            text = re.sub(r'<\|[^|]*end[^|]*text[^|]*\|>', ' ', text, flags=re.IGNORECASE)
+            text = re.sub(r'\s+', ' ', text).strip()
+            print(f"  Final check - Contains '<|endoftext|>': {('<|endoftext|>' in text)}")
         
         jobs[job_id]['status'] = 'processing'
         jobs[job_id]['progress'] = 5
