@@ -605,7 +605,7 @@ function App() {
           </div>
           <div className="info-message">
             <span className="info-icon">ℹ️</span>
-            <span>Analysis takes approximately 5 minutes. Minimum 250 words required.</span>
+            <span>Analysis takes 1 to 3 minutes. Run it in the background, and the alarm will sound when done. Minimum 250 words required.</span>
           </div>
           <div className="text-area-wrapper">
             <textarea
