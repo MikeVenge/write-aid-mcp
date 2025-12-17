@@ -13,6 +13,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
 from typing import Dict, Optional
 import traceback
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import COT client
 from cot_client import FinChatCOTClient
@@ -300,20 +304,63 @@ def process_cot_v2_analysis(job_id: str, text: str, purpose: str):
             return
         
         jobs[job_id]['progress'] = 10
-        jobs[job_id]['status_message'] = 'Starting v2 analysis...'
+        jobs[job_id]['status_message'] = 'Creating session...'
         
-        # Run COT v2 with progress callback
-        # Note: v2 session uses 'humanize-text' COT which expects 'paragraph' parameter
+        # Step 1: Create a new session (same as GO button)
+        session_response = client.create_session()
+        session_id = session_response.get('id')
+        if not session_id:
+            raise RuntimeError(f"No session ID returned. Response: {session_response}")
+        
+        jobs[job_id]['progress'] = 20
+        jobs[job_id]['status_message'] = 'Starting COT analysis...'
+        
+        # Step 2: Call COT with copy-of-humanize-text-1 slug using v1 API
+        # Use v1 API to ensure fresh session each time
+        cot_slug = 'copy-of-humanize-text-1'
+        parameters = {
+            'paragraph': text
+        }
+        
         callback = progress_callback(job_id)
-        result = client.run_cot_v2(
-            session_id=COT_V2_SESSION_ID,
-            text=text,
-            parameter_name='paragraph',  # humanize-text COT expects 'paragraph' parameter
-            progress_callback=callback
+        cot_chat = client.run_cot(session_id=session_id, cot_slug=cot_slug, parameters=parameters)
+        cot_chat_id = cot_chat.get('id')
+        
+        if not cot_chat_id:
+            raise RuntimeError(f"No chat ID returned from COT execution. Response: {cot_chat}")
+        
+        jobs[job_id]['progress'] = 40
+        jobs[job_id]['status_message'] = 'Waiting for analysis to complete...'
+        
+        # Step 3: Poll for completion with progress mapping (40% to 90%)
+        def mapped_callback(poll_progress: int, status: str):
+            # Map polling progress (0-100) to overall progress (40-90)
+            mapped_progress = 40 + int(poll_progress * 0.5)
+            callback(mapped_progress, status)
+        
+        result_data = client.poll_for_completion(
+            session_id=session_id,
+            cot_chat_id=cot_chat_id,
+            max_attempts=200,
+            interval_seconds=5,
+            progress_callback=mapped_callback
         )
         
-        # Extract result content (v2 returns content directly)
+        result_id = result_data.get('result_id')
+        if not result_id:
+            raise RuntimeError(f"No result_id returned from polling. Response: {result_data}")
+        
+        jobs[job_id]['progress'] = 90
+        jobs[job_id]['status_message'] = 'Retrieving results...'
+        
+        # Step 4: Get result content
+        result = client.get_result(result_id)
         content = result.get('content', '')
+        
+        if not content:
+            # Try to get content from metadata if available
+            metadata = result_data.get('metadata', {})
+            content = metadata.get('content', '') or str(result)
         
         jobs[job_id]['status'] = 'completed'
         jobs[job_id]['progress'] = 100

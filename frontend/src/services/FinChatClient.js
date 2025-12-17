@@ -1,5 +1,5 @@
 /**
- * FinChat MCP Client for React
+ * FinChat Client for React
  * Communicates with backend server for AI detection
  */
 
@@ -13,7 +13,7 @@ export class FinChatClient {
       );
     
     this.connected = false;
-    this.mcpEnabled = false;
+    this.cotEnabled = false;
   }
 
   async initialize() {
@@ -29,13 +29,12 @@ export class FinChatClient {
         
         if (configResponse.ok) {
           const config = await configResponse.json();
-          // Support both mcp_enabled (old) and cot_enabled (new)
-          this.mcpEnabled = config.cot_enabled || config.mcp_enabled || false;
+          this.cotEnabled = config.cot_enabled || false;
           this.connected = true;
           
           console.log('✓ FinChat client initialized');
           console.log(`  Backend URL: ${this.backendUrl}`);
-          console.log(`  COT/MCP Enabled: ${this.mcpEnabled}`);
+          console.log(`  COT Enabled: ${this.cotEnabled}`);
           if (config.cot_slug) {
             console.log(`  COT Slug: ${config.cot_slug}`);
           }
@@ -67,7 +66,7 @@ export class FinChatClient {
     return this.connected;
   }
 
-  async analyzeMCP(sentence, paragraph, purpose = 'AI detection for content analysis', onProgress = null) {
+  async analyze(sentence, paragraph, purpose = 'AI detection for content analysis', onProgress = null) {
     if (!this.connected) {
       throw new Error('Backend not connected. Please check your connection.');
     }
@@ -120,11 +119,11 @@ export class FinChatClient {
       return await this.pollForResult(jobId, progressCallback, abortCheck);
       
     } catch (error) {
-      throw new Error(`Failed to analyze with MCP: ${error.message}`);
+      throw new Error(`Failed to analyze: ${error.message}`);
     }
   }
 
-  async analyzeMCPv2(sentence, paragraph, purpose = 'Text humanization', onProgress = null) {
+  async analyzeV2(sentence, paragraph, purpose = 'Text humanization', onProgress = null) {
     if (!this.connected) {
       throw new Error('Backend not connected. Please check your connection.');
     }

@@ -11,7 +11,7 @@ function App() {
   const [progressStatus, setProgressStatus] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
   // eslint-disable-next-line no-unused-vars
-  const [isMCPConnected, setIsMCPConnected] = useState(false);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [showSameTextWarning, setShowSameTextWarning] = useState(false);
   const [client, setClient] = useState(null);
@@ -31,10 +31,10 @@ function App() {
         const finchatClient = new FinChatClient();
         await finchatClient.initialize();
         setClient(finchatClient);
-        setIsMCPConnected(finchatClient.isConnected());
+        setIsBackendConnected(finchatClient.isConnected());
       } catch (error) {
         console.error('Failed to initialize client:', error);
-        setIsMCPConnected(false);
+        setIsBackendConnected(false);
       }
     };
 
@@ -287,9 +287,9 @@ function App() {
         return;
       }
       
-      // Use MCP mode with polling
+      // Use polling mode
       // Pass abort check function so polling can be cancelled
-      const analysisPromise = client.analyzeMCP('', paragraph, 'AI detection analysis', {
+      const analysisPromise = client.analyze('', paragraph, 'AI detection analysis', {
         callback: (progress, status, statusMessage) => {
           // Ignore progress updates if reset was clicked
           if (resetFlagRef.current || analysisAbortRef.current) {
@@ -410,7 +410,7 @@ function App() {
       }
       
       // Use GO2 (v2) mode with polling
-      const analysisPromise = client.analyzeMCPv2('', paragraph, 'Text humanization', {
+      const analysisPromise = client.analyzeV2('', paragraph, 'Text humanization', {
         callback: (progress, status, statusMessage) => {
           // Ignore progress updates if reset was clicked
           if (resetFlagRef.current || analysisAbortRef.current) {

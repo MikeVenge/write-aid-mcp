@@ -62,7 +62,7 @@ frontend/
 
 - **Text Input Panel**: Paste or type text to analyze
 - **Evaluation Panel**: View AI detection results
-- **MCP Integration**: Connects to FinChat MCP via backend
+- **Backend Integration**: Connects to FinChat API via backend
 - **Real-time Status**: Shows connection status and analysis progress
 - **Responsive Design**: Works on desktop and mobile
 
@@ -71,7 +71,7 @@ frontend/
 The frontend communicates with the backend API:
 - `GET /health` - Check backend health
 - `GET /api/config` - Get backend configuration
-- `POST /api/mcp/analyze` - Analyze text via MCP
+- `POST /api/mcp/analyze` - Analyze text via FinChat API
 
 ## Deployment
 
