@@ -37,13 +37,12 @@ class FinChatCOTClient:
         if self.api_token:
             self.headers['Authorization'] = f'Bearer {self.api_token}'
     
-    def create_session(self, client_id: Optional[str] = None, data_source: Optional[str] = None) -> Dict[str, Any]:
+    def create_session(self, client_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a new session for COT execution.
         
         Args:
             client_id: Unique client identifier (required by API, auto-generated if not provided)
-            data_source: Optional data source ('alpha_vantage' or 'edgar')
             
         Returns:
             Session object with 'id' field
@@ -58,10 +57,6 @@ class FinChatCOTClient:
         payload = {
             'client_id': client_id
         }
-        
-        # data_source is optional
-        if data_source:
-            payload['data_source'] = data_source
         
         response = requests.post(url, json=payload, headers=self.headers, timeout=30)
         response.raise_for_status()

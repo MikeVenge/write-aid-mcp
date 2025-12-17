@@ -10,10 +10,12 @@ function App() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
-  const [isMCPConnected, setIsMCPConnected] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [showSameTextWarning, setShowSameTextWarning] = useState(false);
   const [client, setClient] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [analysisType, setAnalysisType] = useState('GO'); // 'GO' or 'GO2'
   const timerIntervalRef = useRef(null);
   const analysisStartTimeRef = useRef(null); // Store start timestamp instead of counting
@@ -29,10 +31,10 @@ function App() {
         const finchatClient = new FinChatClient();
         await finchatClient.initialize();
         setClient(finchatClient);
-        setIsMCPConnected(finchatClient.isConnected());
+        setIsBackendConnected(finchatClient.isConnected());
       } catch (error) {
         console.error('Failed to initialize client:', error);
-        setIsMCPConnected(false);
+        setIsBackendConnected(false);
       }
     };
 
@@ -285,9 +287,9 @@ function App() {
         return;
       }
       
-      // Use MCP mode with polling
+      // Use polling mode
       // Pass abort check function so polling can be cancelled
-      const analysisPromise = client.analyzeMCP('', paragraph, 'AI detection analysis', {
+      const analysisPromise = client.analyze('', paragraph, 'AI detection analysis', {
         callback: (progress, status, statusMessage) => {
           // Ignore progress updates if reset was clicked
           if (resetFlagRef.current || analysisAbortRef.current) {
@@ -408,7 +410,7 @@ function App() {
       }
       
       // Use GO2 (v2) mode with polling
-      const analysisPromise = client.analyzeMCPv2('', paragraph, 'Text humanization', {
+      const analysisPromise = client.analyzeV2('', paragraph, 'Text humanization', {
         callback: (progress, status, statusMessage) => {
           // Ignore progress updates if reset was clicked
           if (resetFlagRef.current || analysisAbortRef.current) {
@@ -545,7 +547,7 @@ function App() {
           <span className="title-write-aid">Write Aid</span>{' '}
           <span className="title-ai-checker">AI Checker</span>
         </h1>
-        <p className="title-subtext">Built with AlphaX Agent Builder</p>
+        <p className="title-subtext">Created with AlphaX Agent Builder</p>
         {isProcessing && (
           <div className="timer-display">
             <span className="timer-label">Analysis Time:</span>
@@ -603,7 +605,7 @@ function App() {
           </div>
           <div className="info-message">
             <span className="info-icon">ℹ️</span>
-            <span>Analysis takes approximately 9 minutes. Minimum 250 words required.</span>
+            <span>Analysis takes 1 to 3 minutes. Run it in the background, and the alarm will sound when done. Minimum 250 words required.</span>
           </div>
           <div className="text-area-wrapper">
             <textarea
